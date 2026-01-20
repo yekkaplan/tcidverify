@@ -131,4 +131,4 @@ Found a bug? Please open an issue on GitHub.
 
 ## 📧 Contact
 
-For questions and support, please contact [your@email.com](mailto:your@email.com)
+For questions and support, please contact [yekpassage@gmail.com](mailto:your@email.com)
