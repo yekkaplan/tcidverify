@@ -1,0 +1,54 @@
+# Gradle
+.gradle/
+build/
+*.log
+local.properties
+
+# Android
+*.iml
+.idea/
+.DS_Store
+*.apk
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+captures/
+.externalNativeBuild
+.cxx/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+package-lock.json
+yarn.lock
+
+# React Native
+.expo/
+.expo-shared/
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+idverify-sdk/android/build/
+idverify-sdk/react-native/android/build/
+idverify-sdk/react-native/lib/
+idverify-sdk/react-native/node_modules/
+
+# Kotlin
+.kotlin/
