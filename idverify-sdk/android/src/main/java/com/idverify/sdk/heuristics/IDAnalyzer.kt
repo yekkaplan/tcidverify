@@ -35,13 +35,16 @@ class IDAnalyzer {
         val aspectRatioScore = aspectRatioValidator.calculateAspectRatioScore(bitmap)
         
         // Calculate weighted overall score
-        // Blur and glare are more important than aspect ratio
+        // Blur and glare are critical, aspect ratio is optional (camera frame != card dimensions)
+        // Aspect ratio validation requires card detection/segmentation which is not implemented yet
         val overallScore = (
-            blurScore * 0.4f +
-            glareScore * 0.4f +
-            aspectRatioScore * 0.2f
+            blurScore * 0.5f +
+            glareScore * 0.5f
+            // Aspect ratio removed from overall score calculation
+            // aspectRatioScore * 0.2f
         )
         
+        // Acceptable if blur and glare meet thresholds (aspect ratio optional for now)
         val isAcceptable = blurScore >= com.idverify.sdk.utils.Constants.Quality.MIN_BLUR_SCORE &&
                           glareScore >= com.idverify.sdk.utils.Constants.Quality.MIN_GLARE_SCORE
         

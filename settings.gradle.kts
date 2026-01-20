@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 rootProject.name = "idverify"
 include(":idverify-sdk:android")
 include(":idverify-sdk:react-native:android")
+include(":idverify-sdk:android-test-app")

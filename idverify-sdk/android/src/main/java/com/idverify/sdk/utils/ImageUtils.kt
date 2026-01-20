@@ -90,4 +90,44 @@ object ImageUtils {
         
         return sum / pixels.size
     }
+    
+    /**
+     * Preprocess bitmap for better OCR (MRZ reading)
+     * Applies contrast enhancement
+     */
+    fun preprocessForOCR(bitmap: Bitmap): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        
+        // Increase contrast for better text recognition
+        for (i in pixels.indices) {
+            val pixel = pixels[i]
+            var red = (pixel shr 16) and 0xff
+            var green = (pixel shr 8) and 0xff
+            var blue = pixel and 0xff
+            
+            // Increase contrast (1.5x) and adjust brightness
+            red = ((red - 128) * 1.5 + 128 - 20).toInt().coerceIn(0, 255)
+            green = ((green - 128) * 1.5 + 128 - 20).toInt().coerceIn(0, 255)
+            blue = ((blue - 128) * 1.5 + 128 - 20).toInt().coerceIn(0, 255)
+            
+            pixels[i] = (0xff shl 24) or (red shl 16) or (green shl 8) or blue
+        }
+        
+        output.setPixels(pixels, 0, width, 0, 0, width, height)
+        return output
+    }
+    
+    /**
+     * Extract bottom portion of bitmap (where MRZ typically is)
+     */
+    fun extractBottomPortion(bitmap: Bitmap, ratio: Float = 0.3f): Bitmap {
+        val height = (bitmap.height * ratio).toInt().coerceAtLeast(1)
+        val y = bitmap.height - height
+        return Bitmap.createBitmap(bitmap, 0, y, bitmap.width, height)
+    }
 }

@@ -19,15 +19,15 @@ class GlareDetector {
         
         return when {
             // Overexposed (glare)
-            meanLuminance > Constants.Quality.MAX_MEAN_LUMINANCE -> {
-                val excess = meanLuminance - Constants.Quality.MAX_MEAN_LUMINANCE
+            meanLuminance > Constants.Quality.MAX_LUMINANCE -> {
+                val excess = meanLuminance - Constants.Quality.MAX_LUMINANCE
                 val penalty = (excess / 15.0).coerceAtMost(1.0)  // Max penalty at 255
                 (1.0 - penalty).toFloat().coerceAtLeast(0.0f)
             }
             
             // Underexposed (too dark)
-            meanLuminance < Constants.Quality.MIN_MEAN_LUMINANCE -> {
-                (meanLuminance / Constants.Quality.MIN_MEAN_LUMINANCE).toFloat()
+            meanLuminance < Constants.Quality.MIN_LUMINANCE -> {
+                (meanLuminance / Constants.Quality.MIN_LUMINANCE).toFloat()
             }
             
             // Good lighting

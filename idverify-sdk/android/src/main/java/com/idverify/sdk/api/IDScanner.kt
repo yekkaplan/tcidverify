@@ -19,7 +19,7 @@ interface IDScanner {
      * @param previewView CameraX PreviewView for camera preview
      * @param callback Callback to receive scanning events
      */
-    fun startScanning(previewView: PreviewView, callback: ScanCallback)
+    fun startScanning(previewView: PreviewView, callback: ScanCallback, lifecycleOwner: androidx.lifecycle.LifecycleOwner? = null)
     
     /**
      * Stop the current scanning session
@@ -43,6 +43,30 @@ interface IDScanner {
      * Call this when the scanner is no longer needed
      */
     fun release()
+    
+    /**
+     * Manually capture the front side of the ID card
+     * Captures current frame if quality is acceptable
+     * This is a suspend function that must be called from a coroutine
+     * @return true if capture was successful
+     */
+    suspend fun captureFrontManually(): Boolean
+    
+    /**
+     * Manually capture the back side of the ID card
+     * Captures current frame if quality is acceptable
+     * This is a suspend function that must be called from a coroutine
+     * @return true if capture was successful
+     */
+    suspend fun captureBackManually(): Boolean
+    
+    /**
+     * Manually complete the scan and process MRZ
+     * Should be called after both front and back are captured
+     * This is a suspend function that must be called from a coroutine
+     * @return true if completion was successful
+     */
+    suspend fun completeScanManually(): Boolean
     
     companion object {
         /**

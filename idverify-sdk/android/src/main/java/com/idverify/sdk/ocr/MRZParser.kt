@@ -42,23 +42,68 @@ class MRZParser {
     }
     
     /**
-     * Parse TD-1 format (Turkish ID Card)
+     * Parse TD-1 format (Turkish ID Card) - TC_ID_SPEC.md compliant
+     * 
+     * Line 1: I<TUR<<<<<<<<<<<<<<<<<<<<<<<<<<
+     *   - Pos 1-2: I< or ID (Document type)
+     *   - Pos 3-5: TUR (Issuing country)
+     *   - Pos 6-14: A12B34567 (Document number, 9 chars)
+     *   - Pos 15: Check digit
+     *   - Pos 16-30: Filler
+     * 
+     * Line 2: [DOB6][C][Sex1][Expiry6][C][Nat3][TC11][C]
+     *   - Pos 1-6: YYMMDD (Birth date)
+     *   - Pos 7: Check digit
+     *   - Pos 8: M/F/< (Sex)
+     *   - Pos 9-14: YYMMDD (Expiry date)
+     *   - Pos 15: Check digit
+     *   - Pos 16-18: TUR (Nationality)
+     *   - Pos 19-29: TC Kimlik No (11 chars, optional)
+     *   - Pos 30: Composite check digit
+     * 
+     * Line 3: [Surname]<<[GivenNames]<<<<<<<<<
+     *   - Up to pos 30: Surname<<GivenNames
      */
     private fun parseTD1Format(lines: List<String>): MRZData {
         val line1 = lines[0]
         val line2 = lines[1]
         val line3 = lines[2]
         
-        // Line 1: Document type and issuing country
-        val documentType = line1[0].toString()  // "I"
-        val issuingCountry = line1.substring(2, 5)  // "TUR"
+        // Line 1: Document type and issuing country (TC_ID_SPEC.md)
+        val documentType = if (line1.length > 0) line1[0].toString() else "I"
+        val issuingCountry = if (line1.length >= 5) line1.substring(2, 5) else "TUR"
         
-        // Line 2: Critical data
-        val documentNumber = line2.substring(0, 9).replace("<", "")
-        val nationality = line2.substring(10, 13)  // TUR
-        val birthDate = line2.substring(13, 19)  // YYMMDD
-        val sex = line2[20].toString()  // M/F
-        val expiryDate = line2.substring(21, 27)  // YYMMDD
+        // Extract document number from line 1 (positions 6-14, 9 chars)
+        val documentNumberRaw = if (line1.length >= 15) {
+            line1.substring(5, 14).replace("<", "").trim()
+        } else {
+            // Fallback: try line 2 if line 1 format is different
+            if (line2.length >= 10) line2.substring(0, 9).replace("<", "") else ""
+        }
+        
+        // Line 2: Critical data (TC_ID_SPEC.md positions)
+        val birthDate = if (line2.length >= 7) line2.substring(0, 6) else ""  // Pos 1-6: YYMMDD
+        val sex = if (line2.length >= 8) line2[7].toString() else "<"  // Pos 8: M/F/<
+        val expiryDate = if (line2.length >= 15) line2.substring(8, 14) else ""  // Pos 9-14: YYMMDD
+        val nationality = if (line2.length >= 18) line2.substring(15, 18) else "TUR"  // Pos 16-18: TUR
+        
+        // Extract TC Kimlik No (Pos 19-29, 11 chars) - TC_ID_SPEC.md
+        val tcKimlikNo = if (line2.length >= 29) {
+            line2.substring(18, 29).replace("<", "").trim()  // Pos 19-29
+        } else {
+            ""
+        }
+        
+        android.util.Log.d("MRZParser", "Extracted TC Kimlik No: $tcKimlikNo (length: ${tcKimlikNo.length})")
+        
+        // Use document number from line 1 if available, otherwise from line 2
+        val documentNumber = if (documentNumberRaw.isNotBlank()) {
+            documentNumberRaw
+        } else if (line2.length >= 10) {
+            line2.substring(0, 9).replace("<", "").trim()
+        } else {
+            ""
+        }
         
         // Line 3: Name fields
         val nameParts = line3.split("<<")
@@ -102,19 +147,60 @@ class MRZParser {
     }
     
     /**
-     * Clean and normalize recognized text
-     * Replaces common OCR errors
+     * Clean and normalize recognized text with context-aware replacements
+     * Replaces common OCR errors based on MRZ position context
      */
     fun cleanMRZText(text: String): String {
-        return text
+        var cleaned = text
             .uppercase()
-            .replace('O', '0')  // O -> 0
-            .replace('Q', '0')  // Q -> 0
-            .replace('D', '0')  // D -> 0 (sometimes)
-            .replace('I', '1')  // I -> 1 (in numeric context)
-            .replace('S', '5')  // S -> 5 (sometimes)
-            .replace('Z', '2')  // Z -> 2 (sometimes)
-            .replace(' ', '<')  // Space -> filler
+            .replace(" ", "<")  // Space -> filler first
+            .replace("-", "<")  // Dash -> filler
+            .replace("_", "<")  // Underscore -> filler
             .filter { it in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<" }
+        
+        // Context-aware replacements (only in numeric contexts)
+        // Don't replace globally - be more selective
+        cleaned = cleaned.mapIndexed { index, char ->
+            when (char) {
+                'O' -> {
+                    // In numeric positions (document number, dates), O might be 0
+                    if (isNumericContext(index, cleaned)) '0' else char
+                }
+                'Q' -> {
+                    // Q is rarely in MRZ, likely 0
+                    if (isNumericContext(index, cleaned)) '0' else char
+                }
+                'I' -> {
+                    // I in numeric context might be 1
+                    if (isNumericContext(index, cleaned)) '1' else char
+                }
+                'S' -> {
+                    // S in numeric context might be 5
+                    if (isNumericContext(index, cleaned)) '5' else char
+                }
+                'Z' -> {
+                    // Z in numeric context might be 2
+                    if (isNumericContext(index, cleaned)) '2' else char
+                }
+                else -> char
+            }
+        }.joinToString("")
+        
+        return cleaned
+    }
+    
+    /**
+     * Check if character is in a numeric context (document number, dates, etc.)
+     */
+    private fun isNumericContext(index: Int, text: String): Boolean {
+        // Document number positions: 0-9 (line 2)
+        // Date positions: 13-18 (DOB), 21-26 (expiry) in line 2
+        // TC No positions: 19-29 (line 2)
+        return when {
+            index in 0..9 -> true  // Document number area
+            index in 13..18 -> true  // DOB area
+            index in 19..29 -> true  // TC No / expiry area
+            else -> false
+        }
     }
 }

@@ -100,6 +100,8 @@ export function useIDScanner(options: UseIDScannerOptions = {}): UseIDScannerRet
       setError(null);
       setResult(null);
       await IDScannerModule.startScanning();
+      // Manually update status to start the UI
+      setStatus('DETECTING_FRONT' as ScanStatus);
     } catch (err) {
       const scanError: ScanError = {
         code: 'START_FAILED',

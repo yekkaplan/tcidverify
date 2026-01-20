@@ -11,10 +11,13 @@ import com.idverify.sdk.api.models.ScanError
 import com.idverify.sdk.api.models.ScanResult
 import com.idverify.sdk.api.models.ScanStatus
 
+import com.facebook.react.module.annotations.ReactModule
+
 /**
  * React Native Native Module for ID Scanner SDK
  * Exposes SDK functionality to JavaScript layer
  */
+@ReactModule(name = IDScannerModule.MODULE_NAME)
 class IDScannerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
     

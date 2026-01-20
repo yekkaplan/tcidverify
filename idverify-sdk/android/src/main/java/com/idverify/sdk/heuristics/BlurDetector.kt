@@ -23,11 +23,11 @@ class BlurDetector {
         val laplacianVariance = calculateLaplacianVariance(grayscale)
         
         // Normalize variance to 0.0-1.0 score
-        // Values > LAPLACIAN_THRESHOLD are considered sharp
+        // Values > MIN_LAPLACIAN_VARIANCE are considered sharp
         return when {
-            laplacianVariance >= Constants.Quality.LAPLACIAN_THRESHOLD -> 1.0f
+            laplacianVariance >= Constants.Quality.MIN_LAPLACIAN_VARIANCE -> 1.0f
             laplacianVariance <= 0.0 -> 0.0f
-            else -> (laplacianVariance / Constants.Quality.LAPLACIAN_THRESHOLD).toFloat()
+            else -> (laplacianVariance / Constants.Quality.MIN_LAPLACIAN_VARIANCE).toFloat()
         }
     }
     
