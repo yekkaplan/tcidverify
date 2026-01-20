@@ -259,6 +259,16 @@ class IDVerificationEngine(private val context: Context) {
     }
     
     /**
+     * Manually complete the scan (for backward compatibility with IDScanner interface)
+     * Calls completeVerification internally
+     * @return true if completion was successful
+     */
+    suspend fun completeScanManually(): Boolean = withContext(Dispatchers.Default) {
+        val result = completeVerification()
+        return@withContext result != null
+    }
+    
+    /**
      * Complete verification with captured images
      */
     suspend fun completeVerification(): VerificationResult? = withContext(Dispatchers.Default) {

@@ -113,8 +113,7 @@ com.idverify.sdk/
 │       └── ScanStatus.kt
 │
 ├── core/                         # Core implementation
-│   ├── ScannerEngine.kt         # Legacy engine (compatibility)
-│   └── IDVerificationEngine.kt  # NEW: Main verification engine
+│   └── IDVerificationEngine.kt  # Main verification engine
 │
 ├── decision/                     # Decision making (NEW)
 │   ├── DecisionEngine.kt        # Main orchestrator
@@ -139,17 +138,7 @@ com.idverify.sdk/
 ├── scoring/                      # Scoring system (NEW)
 │   └── ScoringEngine.kt         # Score calculation
 │
-├── heuristics/                   # Image heuristics (legacy)
-│   ├── BlurDetector.kt
-│   ├── GlareDetector.kt
-│   ├── AspectRatioValidator.kt
-│   └── IDAnalyzer.kt
-│
-├── ocr/                          # OCR (legacy)
-│   ├── MLKitTextRecognizer.kt
-│   ├── MRZParser.kt
-│   └── MRZValidator.kt
-│
+
 └── utils/                        # Utilities
     ├── Constants.kt              # All constants
     └── ImageUtils.kt             # Image processing

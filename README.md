@@ -19,9 +19,13 @@ idverify-sdk/
 ├── android/                    # Native Android SDK (Kotlin)
 │   ├── src/main/java/com/idverify/sdk/
 │   │   ├── api/               # Public SDK API
-│   │   ├── core/              # Scanner engine
-│   │   ├── ocr/               # MRZ parsing & ML Kit
-│   │   ├── heuristics/        # Quality validation
+│   │   ├── core/              # Verification engine
+│   │   ├── decision/          # Decision engine & scoring
+│   │   ├── detection/         # Quality gate
+│   │   ├── pipeline/          # Front/back analysis pipelines
+│   │   ├── mrz/               # MRZ extraction & validation
+│   │   ├── validation/        # TCKN & aspect ratio validators
+│   │   ├── scoring/           # Scoring system
 │   │   └── utils/             # Utilities
 │   └── build.gradle.kts
 │

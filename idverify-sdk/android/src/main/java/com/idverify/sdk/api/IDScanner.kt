@@ -75,7 +75,7 @@ interface IDScanner {
          * @return IDScanner implementation
          */
         fun create(context: Context): IDScanner {
-            return com.idverify.sdk.core.ScannerEngine(context)
+            return IDScannerAdapter(context)
         }
     }
 }

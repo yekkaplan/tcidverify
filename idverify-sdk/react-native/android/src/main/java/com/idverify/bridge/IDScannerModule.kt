@@ -54,7 +54,7 @@ class IDScannerModule(reactContext: ReactApplicationContext) :
         override fun onError(error: ScanError) {
             sendEvent(
                 Events.ERROR_OCCURRED,
-                DataMapper.errorToMap(error.code, error.message, error.details)
+                DataMapper.errorToMap(error.code, error.message, error.details?.toString())
             )
         }
     }
