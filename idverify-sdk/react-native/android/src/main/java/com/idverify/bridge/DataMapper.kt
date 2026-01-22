@@ -33,6 +33,12 @@ object DataMapper {
             }
             putMap("mrzData", mrzDataToMap(result.mrzData))
             putDouble("authenticityScore", result.authenticityScore.toDouble())
+            putMap("scoreDetails", Arguments.createMap().apply {
+                putInt("totalScore", result.scoreDetails.totalScore)
+                putInt("checksumScore", result.scoreDetails.checksumScore)
+                putInt("structureScore", result.scoreDetails.structureScore)
+                putInt("qualityScore", result.scoreDetails.qualityScore)
+            })
             putMap("metadata", metadataToMap(result.metadata))
         }
     }

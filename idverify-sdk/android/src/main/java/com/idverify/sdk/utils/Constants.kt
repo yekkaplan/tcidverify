@@ -12,19 +12,19 @@ object Constants {
     object Quality {
         // Blur detection (Laplacian Variance)
         const val MIN_LAPLACIAN_VARIANCE = 100.0    // TC_ID_SPEC: > 100 = sharp
-        const val MIN_BLUR_SCORE = 0.5f             // Normalized score threshold
+        const val MIN_BLUR_SCORE = 0.35f            // Relaxed: was 0.5 (holograms reduce sharpness)
         
-        // Glare detection
-        const val MIN_GLARE_SCORE = 0.6f            // Normalized score threshold
-        const val MAX_GLARE_AREA_PERCENT = 5.0f     // TC_ID_SPEC: < 5% of card area
+        // Glare detection - RELAXED for holographic IDs
+        const val MIN_GLARE_SCORE = 0.40f           // Relaxed: was 0.6 (holograms reflect light)
+        const val MAX_GLARE_AREA_PERCENT = 15.0f    // Relaxed: was 5.0 (chip + hologram reflections)
         const val BRIGHT_PIXEL_THRESHOLD = 250      // Luminance > 250 = bright
         
         // Luminance (brightness)
         const val MAX_LUMINANCE = 240               // Above = overexposed
         const val MIN_LUMINANCE = 30                // Below = underexposed
         
-        // OCR
-        const val MIN_OCR_CONFIDENCE = 0.85f        // TC_ID_SPEC: 85% per character
+        // OCR - RELAXED for embossed text on holograms
+        const val MIN_OCR_CONFIDENCE = 0.70f        // Relaxed: was 0.85 (hologram overlay lowers confidence)
         
         // Overall
         const val MIN_AUTHENTICITY_SCORE = 0.7f     // Minimum overall score
@@ -38,13 +38,13 @@ object Constants {
         const val HEIGHT_MM = 53.98f
         const val ASPECT_RATIO = WIDTH_MM / HEIGHT_MM  // 1.5858 (ideal)
         
-        // Strict tolerance for OCR gate (user requirement: 1.55-1.62)
-        const val ASPECT_RATIO_MIN_STRICT = 1.55f
-        const val ASPECT_RATIO_MAX_STRICT = 1.62f
+        // Strict tolerance - WIDENED for angled captures
+        const val ASPECT_RATIO_MIN_STRICT = 1.50f      // Relaxed: was 1.55 (accept slight angles)
+        const val ASPECT_RATIO_MAX_STRICT = 1.68f      // Relaxed: was 1.62 (mobile distortion)
         
-        // Loose tolerance for initial detection (TC_ID_SPEC: 1.50-1.65)
-        const val ASPECT_RATIO_MIN = 1.50f
-        const val ASPECT_RATIO_MAX = 1.65f
+        // Loose tolerance for initial detection
+        const val ASPECT_RATIO_MIN = 1.45f             // Relaxed: was 1.50
+        const val ASPECT_RATIO_MAX = 1.70f             // Relaxed: was 1.65
         
         const val CORNER_RADIUS_MM = 3.18f
     }
@@ -63,14 +63,15 @@ object Constants {
         // Checksum weights (7-3-1 algorithm - TC_ID_SPEC)
         val CHECKSUM_WEIGHTS = intArrayOf(7, 3, 1)
         
-        // MRZ extraction region (bottom portion of card)
-        const val EXTRACTION_RATIO_MIN = 0.22f      // Minimum: 22%
-        const val EXTRACTION_RATIO_MAX = 0.28f      // Maximum: 28%
-        const val EXTRACTION_RATIO_DEFAULT = 0.25f  // Default: 25%
+        // MRZ extraction region - ADJUSTED to avoid chip area
+        const val EXTRACTION_RATIO_MIN = 0.15f      // Changed: was 0.22 (skip chip area)
+        const val EXTRACTION_RATIO_MAX = 0.22f      // Changed: was 0.28 (pure MRZ zone)
+        const val EXTRACTION_RATIO_DEFAULT = 0.18f  // Changed: was 0.25 (optimal for Turkish IDs)
+        const val CHIP_SKIP_RATIO = 0.05f           // NEW: Skip top 5% (chip area)
         
-        // Filler (<) ratio constraints
-        const val MIN_FILLER_RATIO = 0.15f          // Minimum 15% fillers
-        const val MAX_FILLER_RATIO = 0.40f          // Maximum 40% fillers
+        // Filler (<) ratio constraints - RELAXED for OCR errors
+        const val MIN_FILLER_RATIO = 0.10f          // Relaxed: was 0.15 (OCR may miss some)
+        const val MAX_FILLER_RATIO = 0.45f          // Relaxed: was 0.40 (OCR may add extra)
     }
     
     /**
@@ -86,7 +87,7 @@ object Constants {
         const val MAX_ASPECT_RATIO_SCORE = 20
         const val MAX_FRONT_TEXT_SCORE = 20
         const val MAX_MRZ_STRUCTURE_SCORE = 20
-        const val MAX_MRZ_CHECKSUM_SCORE = 30
+        const val MAX_MRZ_CHECKSUM_SCORE = 60 // Increased for native validation (was 30)
         const val MAX_TCKN_ALGORITHM_SCORE = 10
         const val MAX_TOTAL_SCORE = 100
     }
@@ -105,7 +106,7 @@ object Constants {
      * Camera Settings
      */
     object Camera {
-        const val IMAGE_CAPTURE_QUALITY = 95        // JPEG quality (0-100)
+        const val IMAGE_CAPTURE_QUALITY = 95        // JPEG quality for CAPTURE (high for OCR)
         const val PREVIEW_ASPECT_RATIO_NUMERATOR = 4
         const val PREVIEW_ASPECT_RATIO_DENOMINATOR = 3
     }

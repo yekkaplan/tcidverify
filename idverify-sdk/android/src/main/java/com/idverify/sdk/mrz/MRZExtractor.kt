@@ -26,14 +26,8 @@ object MRZExtractor {
     /** TD1 format has 3 lines, we extract bottom 2 for data */
     const val EXPECTED_DATA_LINES = 2
     
-    /** MRZ extraction region: bottom 22-28% of image */
-    const val EXTRACTION_RATIO_MIN = 0.22f
-    const val EXTRACTION_RATIO_MAX = 0.28f
-    const val EXTRACTION_RATIO_DEFAULT = 0.25f
-    
-    /** Filler (<) ratio acceptable range: 15-40% */
-    const val MIN_FILLER_RATIO = 0.15f
-    const val MAX_FILLER_RATIO = 0.40f
+    // Import from Constants - adjusted for Turkish ID with chip
+    // These values are now managed in Constants.kt
     
     /** Valid MRZ character set */
     private val MRZ_CHARSET = Regex("^[A-Z0-9<]+$")
@@ -53,16 +47,27 @@ object MRZExtractor {
     )
     
     /**
-     * Extract bottom MRZ region from bitmap
+     * Extract bottom MRZ region from bitmap, avoiding chip area
      * @param bitmap Full card image
-     * @param ratio Portion from bottom (0.22-0.28)
-     * @return Cropped bitmap containing MRZ area
+     * @param ratio Portion from bottom (uses Constants values)
+     * @return Cropped bitmap containing MRZ area (avoiding chip)
      */
-    fun extractMRZRegion(bitmap: Bitmap, ratio: Float = EXTRACTION_RATIO_DEFAULT): Bitmap {
-        val effectiveRatio = ratio.coerceIn(EXTRACTION_RATIO_MIN, EXTRACTION_RATIO_MAX)
-        val height = (bitmap.height * effectiveRatio).toInt().coerceAtLeast(1)
-        val y = bitmap.height - height
-        return Bitmap.createBitmap(bitmap, 0, y, bitmap.width, height)
+    fun extractMRZRegion(bitmap: Bitmap, ratio: Float = com.idverify.sdk.utils.Constants.MRZ.EXTRACTION_RATIO_DEFAULT): Bitmap {
+        val effectiveRatio = ratio.coerceIn(
+            com.idverify.sdk.utils.Constants.MRZ.EXTRACTION_RATIO_MIN,
+            com.idverify.sdk.utils.Constants.MRZ.EXTRACTION_RATIO_MAX
+        )
+        
+        // Skip chip area (top portion of image)
+        val chipSkipHeight = (bitmap.height * com.idverify.sdk.utils.Constants.MRZ.CHIP_SKIP_RATIO).toInt()
+        
+        // Extract from bottom, accounting for chip skip
+        val extractionHeight = (bitmap.height * effectiveRatio).toInt().coerceAtLeast(1)
+        val y = (bitmap.height - extractionHeight).coerceAtLeast(chipSkipHeight)
+        
+        android.util.Log.d("MRZExtractor", "Extracting MRZ: image=${bitmap.height}px, skip=${chipSkipHeight}px, extract=${extractionHeight}px from y=$y")
+        
+        return Bitmap.createBitmap(bitmap, 0, y, bitmap.width, extractionHeight)
     }
     
     /**
@@ -74,15 +79,18 @@ object MRZExtractor {
         val errors = mutableListOf<ValidationError>()
         
         android.util.Log.d("MRZExtractor", "Processing ${rawLines.size} raw lines")
+        rawLines.forEachIndexed { i, line ->
+            android.util.Log.d("MRZExtractor", "  RAW[$i] len=${line.length}: \"$line\"")
+        }
         
-        // Step 1: Clean and filter potential MRZ lines (LENIENT)
+        // Step 1: Clean and filter potential MRZ lines (VERY LENIENT)
         val cleanedLines = rawLines
             .map { cleanMRZLine(it) }
-            .filter { it.length >= 15 }  // More lenient: at least 15 chars
+            .filter { it.length >= 10 }  // Super lenient: at least 10 chars
         
         android.util.Log.d("MRZExtractor", "Cleaned lines (${cleanedLines.size}):")
         cleanedLines.forEachIndexed { i, line -> 
-            android.util.Log.d("MRZExtractor", "  [$i] len=${line.length}: $line")
+            android.util.Log.d("MRZExtractor", "  CLEAN[$i] len=${line.length}: $line")
         }
         
         // Filter lines that look like MRZ
@@ -143,7 +151,7 @@ object MRZExtractor {
         val fillerCount = normalizedLines.sumOf { line -> line.count { it == '<' } }
         val fillerRatio = if (totalChars > 0) fillerCount.toFloat() / totalChars else 0f
         
-        android.util.Log.d("MRZExtractor", "Filler ratio: $fillerRatio (valid: ${MIN_FILLER_RATIO}-${MAX_FILLER_RATIO})")
+        android.util.Log.d("MRZExtractor", "Filler ratio: $fillerRatio (valid: ${com.idverify.sdk.utils.Constants.MRZ.MIN_FILLER_RATIO}-${com.idverify.sdk.utils.Constants.MRZ.MAX_FILLER_RATIO})")
         
         // Calculate structure score (0-20) - more lenient
         val score = calculateStructureScore(normalizedLines, fillerRatio, errors)
@@ -241,8 +249,10 @@ object MRZExtractor {
         val allValidCharset = lines.all { MRZ_CHARSET.matches(it) }
         if (allValidCharset) score += 3
         
-        // Filler ratio: +3 points if in range
-        if (fillerRatio in MIN_FILLER_RATIO..MAX_FILLER_RATIO) score += 3
+        // Filler ratio: +3 points if in range (use Constants values)
+        val minFiller = com.idverify.sdk.utils.Constants.MRZ.MIN_FILLER_RATIO
+        val maxFiller = com.idverify.sdk.utils.Constants.MRZ.MAX_FILLER_RATIO
+        if (fillerRatio in minFiller..maxFiller) score += 3
         
         return score.coerceAtMost(20)
     }

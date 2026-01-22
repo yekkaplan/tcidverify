@@ -184,4 +184,60 @@ object MRZChecksumValidator {
         
         return "%02d.%02d.%04d".format(dd, mm, yyyy)
     }
+    
+    /**
+     * Validate Line 2 checksums only (when Line 1 is reconstructed/missing)
+     * 
+     * This validates:
+     * 1. Birth Date (pos 0-5, check at 6)
+     * 2. Expiry Date (pos 8-13, check at 14)
+     * 3. Composite is NOT validated (needs Line 1 doc number)
+     * 
+     * @param line2 TD1 Line 2 (30 chars)
+     * @return ValidationResult with partial score (max 22 points)
+     */
+    fun validateLine2Only(line2: String): ValidationResult {
+        val errors = mutableListOf<ValidationError>()
+        var validCount = 0
+        
+        val line = line2.padEnd(30, '<')
+        
+        // 1. Birth Date Check (Line 2: positions 0-5, check at 6)
+        val birthDate = line.substring(0, 6)
+        val birthDateCheck = line.getOrElse(6) { '<' }
+        val birthDateValid = validateCheckDigit(birthDate, birthDateCheck)
+        if (birthDateValid) validCount++ else errors.add(ValidationError.MRZ_BIRTH_DATE_CHECKSUM_FAIL)
+        
+        // 2. Expiry Date Check (Line 2: positions 8-13, check at 14)
+        val expiryDate = line.substring(8, 14)
+        val expiryDateCheck = line.getOrElse(14) { '<' }
+        val expiryDateValid = validateCheckDigit(expiryDate, expiryDateCheck)
+        if (expiryDateValid) validCount++ else errors.add(ValidationError.MRZ_EXPIRY_DATE_CHECKSUM_FAIL)
+        
+        // 3. TCKN Validation (optional - positions 18-28)
+        val tckn = line.substring(18, 29).replace("<", "")
+        val tcknValid = if (tckn.length == 11 && tckn.all { it.isDigit() }) {
+            com.idverify.sdk.validation.TCKNValidator.validate(tckn).isValid
+        } else false
+        if (tcknValid) validCount++
+        
+        // Calculate score (0-30 points max for Line 2 only validation)
+        // Birth date: 10 pts, Expiry: 10 pts, TCKN: 10 pts
+        val score = validCount * 10
+        
+        // Valid if at least birth date and one other check pass
+        val isValid = birthDateValid && (expiryDateValid || tcknValid)
+        
+        return ValidationResult(
+            isValid = isValid,
+            docNumberValid = false, // Not checked
+            birthDateValid = birthDateValid,
+            expiryDateValid = expiryDateValid,
+            compositeValid = false, // Not checked
+            validCount = validCount,
+            totalChecks = 3,
+            errors = errors,
+            score = score
+        )
+    }
 }

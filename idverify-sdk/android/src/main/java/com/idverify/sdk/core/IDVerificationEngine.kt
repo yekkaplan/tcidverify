@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -16,6 +17,7 @@ import com.idverify.sdk.decision.ValidationError
 import com.idverify.sdk.detection.QualityGate
 import com.idverify.sdk.utils.Constants
 import com.idverify.sdk.utils.ImageUtils.toBitmap
+import com.idverify.sdk.utils.ImageUtils.toScaledBitmap
 import com.idverify.sdk.utils.ImageUtils.toJpegBytes
 import kotlinx.coroutines.*
 import java.util.concurrent.ExecutorService
@@ -177,16 +179,61 @@ class IDVerificationEngine(private val context: Context) {
      * @return true if capture successful
      */
     suspend fun captureFrontManually(): Boolean = withContext(Dispatchers.Default) {
-        val bitmap = lastBitmap ?: return@withContext false
-        val quality = lastQualityResult
+        Log.d(TAG, "captureFrontManually başladı")
+        val originalBitmap = lastBitmap ?: return@withContext false
         
-        if (quality == null || !quality.passed) {
-            android.util.Log.w(TAG, "Quality not sufficient for front capture")
+        // CRITICAL: Create a copy to avoid recycle issues
+        // The original bitmap might be recycled by analyzeFrame
+        if (originalBitmap.isRecycled) {
+            android.util.Log.e(TAG, "Original bitmap already recycled")
             return@withContext false
         }
         
-        // Analyze front side
-        val result = decisionEngine.analyzeFrontSide(bitmap)
+        // Create immutable copy
+        val bitmap = Bitmap.createBitmap(originalBitmap)
+        val quality = lastQualityResult
+        
+        Log.d(TAG, "Bitmap size: ${bitmap.width}x${bitmap.height}, quality passed: ${quality?.passed}")
+        
+        // More lenient quality check - only reject if severely bad
+        if (quality == null) {
+            android.util.Log.w(TAG, "Quality check not available")
+            // Continue anyway - let score decide
+        } else if (!quality.passed) {
+            // Check if quality is just slightly below threshold
+            val blurOk = quality.blurScore >= 0.5f
+            val glareOk = quality.glareScore >= 0.5f
+            val brightnessOk = quality.brightnessScore >= 0.4f
+            
+            if (!blurOk && !glareOk && !brightnessOk) {
+                android.util.Log.w(TAG, "Quality severely insufficient for front capture")
+                return@withContext false
+            }
+            // If at least one quality metric is OK, continue
+            Log.d(TAG, "Quality borderline but continuing: blur=$blurOk, glare=$glareOk, brightness=$brightnessOk")
+        }
+        
+        // CRITICAL: For OCR, use optimal resolution (1080p max)
+        // Full resolution (2992x2992) is too large for OCR and causes failures
+        // Scale to 1080p for analysis, but keep full res for storage
+        val analysisBitmap = if (bitmap.width > 1080 || bitmap.height > 1080) {
+            val scale = 1080f / maxOf(bitmap.width, bitmap.height)
+            val scaledWidth = (bitmap.width * scale).toInt()
+            val scaledHeight = (bitmap.height * scale).toInt()
+            Log.d(TAG, "Scaling for OCR: ${bitmap.width}x${bitmap.height} -> ${scaledWidth}x${scaledHeight}")
+            Bitmap.createScaledBitmap(bitmap, scaledWidth, scaledHeight, true)
+        } else {
+            bitmap
+        }
+        
+        Log.d(TAG, "analyzeFrontSide çağrılıyor (${analysisBitmap.width}x${analysisBitmap.height})")
+        val result = decisionEngine.analyzeFrontSide(analysisBitmap)
+        Log.d(TAG, "analyzeFrontSide tamamlandı: totalScore=${result.totalScore}")
+        
+        // Recycle scaled bitmap if created
+        if (analysisBitmap != bitmap && !analysisBitmap.isRecycled) {
+            analysisBitmap.recycle()
+        }
         
         // Check if FRONT-SPECIFIC score is sufficient
         // Use frontTextScore + aspect ratio (not total which includes MRZ)
@@ -194,9 +241,17 @@ class IDVerificationEngine(private val context: Context) {
                         result.scoreBreakdown.aspectRatioScore +
                         result.scoreBreakdown.tcknAlgorithmScore
         
-        // For front capture, need at least 15 points (out of 50 possible for front-only)
-        // Aspect ratio always gives 10, so need just 5 from front text/TCKN
-        val frontThreshold = 15
+        // For front capture, need at least 20 points (out of 50 possible for front-only)
+        // But be more lenient if aspect ratio is good (10 points)
+        val frontThreshold = if (result.scoreBreakdown.aspectRatioScore >= 10) {
+            18  // If aspect ratio is good, lower threshold slightly
+        } else {
+            20  // Otherwise require full threshold
+        }
+        
+        Log.d(TAG, "Front score breakdown: AR=${result.scoreBreakdown.aspectRatioScore}, FT=${result.scoreBreakdown.frontTextScore}, TC=${result.scoreBreakdown.tcknAlgorithmScore}")
+        Log.d(TAG, "Front total: $frontScore (threshold: $frontThreshold)")
+        
         if (frontScore < frontThreshold) {
             android.util.Log.w(TAG, "Front side score too low: $frontScore (need $frontThreshold)")
             return@withContext false
@@ -204,9 +259,14 @@ class IDVerificationEngine(private val context: Context) {
         
         android.util.Log.d(TAG, "Front capture OK: score=$frontScore")
         
-        // Store capture
+        // Store capture - bitmap is a copy, safe to compress
         frontImageBytes = bitmap.toJpegBytes()
         frontDecisionResult = result
+        
+        // Recycle the copy after compression
+        if (!bitmap.isRecycled) {
+            bitmap.recycle()
+        }
         
         withContext(Dispatchers.Main) {
             callback?.onFrontCaptured(frontImageBytes!!, result)
@@ -221,24 +281,56 @@ class IDVerificationEngine(private val context: Context) {
      * @return true if capture successful
      */
     suspend fun captureBackManually(): Boolean = withContext(Dispatchers.Default) {
-        val bitmap = lastBitmap ?: return@withContext false
+        Log.d(TAG, "captureBackManually başladı")
+        val originalBitmap = lastBitmap ?: return@withContext false
+        
+        // CRITICAL: Create a copy to avoid recycle issues
+        // The original bitmap might be recycled by analyzeFrame
+        if (originalBitmap.isRecycled) {
+            android.util.Log.e(TAG, "Original bitmap already recycled")
+            return@withContext false
+        }
+        
+        // Create immutable copy
+        val bitmap = Bitmap.createBitmap(originalBitmap)
         val quality = lastQualityResult
+        
+        Log.d(TAG, "Bitmap size: ${bitmap.width}x${bitmap.height}, quality passed: ${quality?.passed}")
         
         if (quality == null || !quality.passed) {
             android.util.Log.w(TAG, "Quality not sufficient for back capture")
             return@withContext false
         }
         
-        // Analyze back side (MRZ)
-        val result = decisionEngine.analyzeBackSide(bitmap)
+        // CRITICAL: For OCR, use optimal resolution (1080p max)
+        // Full resolution (2992x2992) is too large for OCR and causes failures
+        // Scale to 1080p for analysis, but keep full res for storage
+        val analysisBitmap = if (bitmap.width > 1080 || bitmap.height > 1080) {
+            val scale = 1080f / maxOf(bitmap.width, bitmap.height)
+            val scaledWidth = (bitmap.width * scale).toInt()
+            val scaledHeight = (bitmap.height * scale).toInt()
+            Log.d(TAG, "Scaling for OCR: ${bitmap.width}x${bitmap.height} -> ${scaledWidth}x${scaledHeight}")
+            Bitmap.createScaledBitmap(bitmap, scaledWidth, scaledHeight, true)
+        } else {
+            bitmap
+        }
+        
+        Log.d(TAG, "analyzeBackSide çağrılıyor (${analysisBitmap.width}x${analysisBitmap.height})")
+        val result = decisionEngine.analyzeBackSide(analysisBitmap)
+        Log.d(TAG, "analyzeBackSide tamamlandı: totalScore=${result.totalScore}, MRZ=${result.scoreBreakdown.mrzStructureScore}+${result.scoreBreakdown.mrzChecksumScore}")
+        
+        // Recycle scaled bitmap if created
+        if (analysisBitmap != bitmap && !analysisBitmap.isRecycled) {
+            analysisBitmap.recycle()
+        }
         
         // Check MRZ-SPECIFIC score (structure + checksum)
         val mrzScore = result.scoreBreakdown.mrzStructureScore + 
                       result.scoreBreakdown.mrzChecksumScore
         
-        // For back capture, need at least 10 points (out of 50 possible for MRZ)
-        // More lenient for demo - MRZ detection can be tricky
-        val backThreshold = 10
+        // For back capture, need at least 20 points (out of 80 possible for MRZ)
+        // Structure(20) OR Structure(10)+Checksum(10) minimum
+        val backThreshold = 20
         if (mrzScore < backThreshold) {
             android.util.Log.w(TAG, "Back side MRZ score too low: $mrzScore (need $backThreshold)")
             return@withContext false
@@ -246,9 +338,14 @@ class IDVerificationEngine(private val context: Context) {
         
         android.util.Log.d(TAG, "Back capture OK: MRZ score=$mrzScore")
         
-        // Store capture
+        // Store capture - bitmap is a copy, safe to compress
         backImageBytes = bitmap.toJpegBytes()
         backDecisionResult = result
+        
+        // Recycle the copy after compression
+        if (!bitmap.isRecycled) {
+            bitmap.recycle()
+        }
         
         withContext(Dispatchers.Main) {
             callback?.onBackCaptured(backImageBytes!!, result)
@@ -272,12 +369,18 @@ class IDVerificationEngine(private val context: Context) {
      * Complete verification with captured images
      */
     suspend fun completeVerification(): VerificationResult? = withContext(Dispatchers.Default) {
-        val front = frontImageBytes
-        val back = backImageBytes
-        val frontResult = frontDecisionResult
-        val backResult = backDecisionResult
+        Log.d(TAG, "completeVerification başladı")
+        
+        try {
+            val front = frontImageBytes
+            val back = backImageBytes
+            val frontResult = frontDecisionResult
+            val backResult = backDecisionResult
+            
+            Log.d(TAG, "front=${front?.size}, back=${back?.size}, frontResult=$frontResult, backResult=$backResult")
         
         if (front == null || back == null || frontResult == null || backResult == null) {
+                Log.e(TAG, "Missing data: front=${front != null}, back=${back != null}, frontResult=${frontResult != null}, backResult=${backResult != null}")
             withContext(Dispatchers.Main) {
                 callback?.onError(VerificationError(
                     code = "MISSING_IMAGES",
@@ -288,40 +391,58 @@ class IDVerificationEngine(private val context: Context) {
             return@withContext null
         }
         
-        setMode(ScanMode.PROCESSING, "Doğrulama işleniyor...")
-        
-        // Calculate combined score
-        val combinedScore = (frontResult.totalScore + backResult.totalScore) / 2
-        val finalDecision = when {
-            combinedScore >= Constants.Scoring.THRESHOLD_VALID -> DecisionResult.Decision.VALID
-            combinedScore >= Constants.Scoring.THRESHOLD_RETRY -> DecisionResult.Decision.RETRY
-            else -> DecisionResult.Decision.INVALID
-        }
-        
-        // Extract data from back result
-        val extractedData = extractIDData(backResult)
-        
-        val result = VerificationResult(
-            isValid = finalDecision == DecisionResult.Decision.VALID,
-            totalScore = combinedScore,
-            decision = finalDecision,
-            frontImage = front,
-            backImage = back,
-            frontResult = frontResult,
-            backResult = backResult,
-            extractedData = extractedData
-        )
+            Log.d(TAG, "setMode PROCESSING")
+            setMode(ScanMode.PROCESSING, "Doğrulama işleniyor...")
+            
+            // Calculate combined score
+            Log.d(TAG, "Skor hesaplanıyor: front=${frontResult.totalScore}, back=${backResult.totalScore}")
+            val combinedScore = (frontResult.totalScore + backResult.totalScore) / 2
+            Log.d(TAG, "Combined score: $combinedScore")
+            
+            val finalDecision = when {
+                combinedScore >= Constants.Scoring.THRESHOLD_VALID -> DecisionResult.Decision.VALID
+                combinedScore >= Constants.Scoring.THRESHOLD_RETRY -> DecisionResult.Decision.RETRY
+                else -> DecisionResult.Decision.INVALID
+            }
+            Log.d(TAG, "Final decision: $finalDecision")
+            
+            // Extract data from back result
+            Log.d(TAG, "extractIDData çağrılıyor")
+            val extractedData = extractIDData(backResult)
+            Log.d(TAG, "extractedData: $extractedData")
+            
+            Log.d(TAG, "VerificationResult oluşturuluyor")
+            val result = VerificationResult(
+                isValid = finalDecision == DecisionResult.Decision.VALID,
+                totalScore = combinedScore,
+                decision = finalDecision,
+                frontImage = front,
+                backImage = back,
+                frontResult = frontResult,
+                backResult = backResult,
+                extractedData = extractedData
+            )
+            Log.d(TAG, "VerificationResult oluşturuldu")
         
         withContext(Dispatchers.Main) {
+                Log.d(TAG, "Main thread'e geçiliyor")
             if (result.isValid) {
                 setMode(ScanMode.COMPLETED, "✓ Doğrulama başarılı (Skor: $combinedScore)")
             } else {
                 setMode(ScanMode.ERROR, "✗ Doğrulama başarısız (Skor: $combinedScore)")
             }
+                Log.d(TAG, "onVerificationComplete çağrılıyor")
             callback?.onVerificationComplete(result)
+                Log.d(TAG, "onVerificationComplete tamamlandı")
         }
         
+            Log.d(TAG, "completeVerification tamamlandı")
         return@withContext result
+        } catch (e: Exception) {
+            Log.e(TAG, "completeVerification HATA", e)
+            e.printStackTrace()
+            throw e
+        }
     }
     
     /**
@@ -370,9 +491,28 @@ class IDVerificationEngine(private val context: Context) {
     fun getLastQuality(): QualityGate.QualityResult? = lastQualityResult
     
     /**
+     * Get current quality status (alias for consistency)
+     */
+    fun getLastQualityResult(): QualityGate.QualityResult? = lastQualityResult
+    
+    /**
      * Get current mode
      */
     fun getCurrentMode(): ScanMode = currentMode
+    
+    /**
+     * Get best front result from decision engine
+     */
+    fun getBestFrontResult(): DecisionResult? {
+        return decisionEngine.getBestFrontResult()
+    }
+    
+    /**
+     * Get best back result from decision engine
+     */
+    fun getBestBackResult(): DecisionResult? {
+        return decisionEngine.getBestBackResult()
+    }
     
     // ==================== Private Implementation ====================
     
@@ -406,10 +546,11 @@ class IDVerificationEngine(private val context: Context) {
             .build()
             .also { it.setSurfaceProvider(previewView.surfaceProvider) }
         
-        // Image Analysis
+        // Image Analysis - Use 720p for balance between OCR quality and memory
         imageAnalysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setTargetRotation(rotation)
+            .setTargetResolution(android.util.Size(1280, 720)) // 720p - good balance
             .build()
             .also { analysis ->
                 analysis.setAnalyzer(cameraExecutor) { imageProxy ->
@@ -462,17 +603,32 @@ class IDVerificationEngine(private val context: Context) {
         }
         
         try {
-            // Convert to bitmap BEFORE closing
-            val bitmap = imageProxy.toBitmap()
+            // BEST PRACTICE: Two-bitmap strategy
+            // 1. FULL RESOLUTION for capture (stored, not processed)
+            // 2. SCALED for live analysis (processed, discarded)
+            
+            val fullBitmap = imageProxy.toBitmap()  // Full resolution for capture
+            val scaledBitmap = Bitmap.createScaledBitmap(
+                fullBitmap, 
+                720,  // Fixed 720p width for analysis
+                (fullBitmap.height * 720f / fullBitmap.width).toInt(),
+                true
+            )
+            
             imageProxy.close()
             lastAnalysisTime = now
             
-            // Store for manual capture
-            lastBitmap = bitmap
+            // MEMORY OPTIMIZATION: Recycle old full bitmap
+            val oldBitmap = lastBitmap
+            lastBitmap = fullBitmap  // Store FULL res for capture
+            if (oldBitmap != null && oldBitmap != fullBitmap && !oldBitmap.isRecycled) {
+                oldBitmap.recycle()
+            }
             
-            // Run analysis on background thread
+            // Run analysis on SCALED bitmap (memory efficient)
+            // DON'T manually recycle - let GC handle it (safer with coroutines)
             coroutineScope.launch(Dispatchers.Default) {
-                processFrame(bitmap)
+                processFrame(scaledBitmap)
             }
             
         } catch (e: Exception) {

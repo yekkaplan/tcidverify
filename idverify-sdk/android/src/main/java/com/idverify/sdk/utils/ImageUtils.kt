@@ -14,7 +14,8 @@ import java.io.ByteArrayOutputStream
 object ImageUtils {
     
     /**
-     * Convert ImageProxy to Bitmap
+     * Convert ImageProxy to Bitmap (Full Resolution)
+     * Used for CAPTURE - maintains high quality for OCR
      */
     fun ImageProxy.toBitmap(): Bitmap {
         val yBuffer = planes[0].buffer
@@ -35,7 +36,38 @@ object ImageUtils {
         val out = ByteArrayOutputStream()
         yuvImage.compressToJpeg(Rect(0, 0, width, height), 100, out)
         val imageBytes = out.toByteArray()
+        out.close()
         return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+    }
+    
+    /**
+     * Convert ImageProxy to Bitmap (Scaled for Analysis)
+     * Used for LIVE FRAME ANALYSIS - memory efficient
+     * @param maxDimension Maximum width or height (default 720)
+     */
+    fun ImageProxy.toScaledBitmap(maxDimension: Int = 720): Bitmap {
+        // Convert to full bitmap first
+        val fullBitmap = toBitmap()
+        
+        // Calculate scale factor
+        val scale = maxDimension.toFloat() / maxOf(fullBitmap.width, fullBitmap.height)
+        
+        // If already small enough, return as-is
+        if (scale >= 1.0f) {
+            return fullBitmap
+        }
+        
+        // Scale down
+        val scaledWidth = (fullBitmap.width * scale).toInt()
+        val scaledHeight = (fullBitmap.height * scale).toInt()
+        val scaled = Bitmap.createScaledBitmap(fullBitmap, scaledWidth, scaledHeight, true)
+        
+        // Recycle original
+        if (scaled != fullBitmap) {
+            fullBitmap.recycle()
+        }
+        
+        return scaled
     }
     
     /**

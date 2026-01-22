@@ -124,6 +124,12 @@ class IDScannerAdapter(private val context: Context) : IDScanner {
                 backImage = result.backImage,
                 mrzData = mrzData,
                 authenticityScore = result.totalScore / 100f,
+                scoreDetails = com.idverify.sdk.api.models.ScoreDetails(
+                    totalScore = result.totalScore,
+                    checksumScore = result.backResult.scoreBreakdown.mrzChecksumScore + result.backResult.scoreBreakdown.tcknAlgorithmScore,
+                    structureScore = result.backResult.scoreBreakdown.mrzStructureScore,
+                    qualityScore = result.frontResult.scoreBreakdown.aspectRatioScore // Approximation for now
+                ),
                 metadata = ScanMetadata(
                     scanDuration = 0L,
                     frontCaptureTimestamp = System.currentTimeMillis(),

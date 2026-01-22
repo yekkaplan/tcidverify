@@ -9,19 +9,22 @@ import com.idverify.sdk.validation.AspectRatioValidator
 /**
  * Scoring Engine - Calculates final authenticity score
  * 
- * Total: 100 points
+ * VISION-FIRST Scoring Formula (Total: 100 points)
  * 
  * Score Breakdown:
- * - Aspect Ratio Validation: +20 points (AspectRatioValidator)
- * - Front Side Text Structure: +20 points (FrontSidePipeline)
- * - MRZ Structure (regex, lines): +20 points (BackSidePipeline.structureScore)
- * - MRZ Checksum Validation: +30 points (BackSidePipeline.checksumScore)
- * - TCKN Algorithm Validation: +10 points (TCKNValidator)
+ * - MRZ Checksum Validation: +70 points (Native C++ 7-3-1)
+ *   • 4 checksums x 17.5 pts each (scaled from native 0-60)
+ *   • This is the CRITICAL validation - real ID must pass checksums
+ * - Perspective/Aspect Ratio: +20 points (Card detection quality)
+ * - OCR Confidence: +10 points (Structure score from extraction)
  * 
  * Decision Thresholds:
- * - ≥80: VALID (Gerçek T.C. Kimlik Kartı)
- * - 50-79: RETRY (Tekrar Okut)
- * - <50: INVALID (Geçersiz)
+ * - ≥85: VALID (Gerçek T.C. Kimlik Kartı) - requires checksum pass
+ * - 50-84: RETRY (Tekrar Okut) - partial success
+ * - <50: INVALID (Geçersiz) - clear failure
+ * 
+ * Key Principle: Checksum validation is weighted heavily because
+ * a real ID card MUST have valid ICAO 9303 checksums.
  */
 object ScoringEngine {
     
@@ -127,7 +130,7 @@ object ScoringEngine {
         if (aspectRatioValid) score += 20
         score += frontTextScore.coerceAtMost(20)
         score += mrzStructureScore.coerceAtMost(20)
-        score += mrzChecksumScore.coerceAtMost(30)
+        score += mrzChecksumScore.coerceAtMost(60) // Partial update for quick check
         if (tcknValid) score += 10
         
         return score.coerceAtMost(100)

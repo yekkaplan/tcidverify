@@ -47,6 +47,10 @@ object QualityGate {
         val overallScore: Float get() = (blurScore + glareScore + brightnessScore) / 3f
     }
     
+    /** Sample size for quality calculations (to save memory) */
+    private const val SAMPLE_WIDTH = 320
+    private const val SAMPLE_HEIGHT = 240
+    
     /**
      * Perform full quality assessment
      * @param bitmap Image to assess
@@ -55,8 +59,15 @@ object QualityGate {
     fun assess(bitmap: Bitmap): QualityResult {
         val errors = mutableListOf<ValidationError>()
         
+        // Scale down for memory-efficient processing
+        val sampleBitmap = if (bitmap.width > SAMPLE_WIDTH || bitmap.height > SAMPLE_HEIGHT) {
+            Bitmap.createScaledBitmap(bitmap, SAMPLE_WIDTH, SAMPLE_HEIGHT, true)
+        } else {
+            bitmap
+        }
+        
         // 1. Calculate Laplacian variance (blur detection)
-        val laplacianVariance = calculateLaplacianVariance(bitmap)
+        val laplacianVariance = calculateLaplacianVariance(sampleBitmap)
         val blurScore = when {
             laplacianVariance >= MIN_LAPLACIAN_VARIANCE -> 1.0f
             laplacianVariance <= 0 -> 0.0f
@@ -66,8 +77,11 @@ object QualityGate {
             errors.add(ValidationError.IMAGE_TOO_BLURRY)
         }
         
-        // 2. Calculate mean luminance (brightness)
-        val meanLuminance = calculateMeanLuminance(bitmap)
+        // 2 & 3. Calculate luminance and glare in single pass (memory efficient)
+        val luminanceResult = calculateLuminanceAndGlare(sampleBitmap)
+        val meanLuminance = luminanceResult.mean
+        val glarePercent = luminanceResult.glarePercent
+        
         val brightnessScore = when {
             meanLuminance < MIN_LUMINANCE -> (meanLuminance / MIN_LUMINANCE).toFloat()
             meanLuminance > MAX_LUMINANCE -> ((255 - meanLuminance) / (255 - MAX_LUMINANCE)).toFloat()
@@ -76,9 +90,6 @@ object QualityGate {
         if (brightnessScore < 0.5f) {
             errors.add(ValidationError.LIGHTING_ISSUE)
         }
-        
-        // 3. Calculate glare percentage
-        val glarePercent = calculateGlarePercent(bitmap)
         val glareScore = when {
             glarePercent <= MAX_GLARE_PERCENT -> 1.0f
             glarePercent >= MAX_GLARE_PERCENT * 3 -> 0.0f
@@ -86,6 +97,11 @@ object QualityGate {
         }
         if (glareScore < 0.5f) {
             errors.add(ValidationError.LIGHTING_ISSUE)
+        }
+        
+        // Recycle scaled bitmap if we created one
+        if (sampleBitmap !== bitmap) {
+            sampleBitmap.recycle()
         }
         
         // Gate passes if all individual scores are above threshold
@@ -115,85 +131,110 @@ object QualityGate {
     /**
      * Calculate Laplacian variance for blur detection
      * Higher = sharper image
+     * 
+     * Optimized: Uses Welford's online algorithm to calculate variance
+     * without storing all Laplacian values (saves memory)
      */
     private fun calculateLaplacianVariance(bitmap: Bitmap): Double {
         val width = bitmap.width
         val height = bitmap.height
+        
+        if (width < 3 || height < 3) return 0.0
+        
         val pixels = IntArray(width * height)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
         
-        // Convert to grayscale
-        val gray = IntArray(pixels.size) { i ->
-            val pixel = pixels[i]
-            val r = (pixel shr 16) and 0xff
-            val g = (pixel shr 8) and 0xff
-            val b = pixel and 0xff
-            ((0.299 * r + 0.587 * g + 0.114 * b).toInt())
-        }
+        // Welford's online algorithm for variance
+        var count = 0L
+        var mean = 0.0
+        var m2 = 0.0
         
-        // Apply Laplacian kernel: [[0,1,0],[1,-4,1],[0,1,0]]
-        val laplacian = mutableListOf<Int>()
-        
+        // Process in a single pass without storing intermediate values
         for (y in 1 until height - 1) {
             for (x in 1 until width - 1) {
-                val center = gray[y * width + x]
-                val top = gray[(y - 1) * width + x]
-                val bottom = gray[(y + 1) * width + x]
-                val left = gray[y * width + (x - 1)]
-                val right = gray[y * width + (x + 1)]
+                // Get grayscale values inline
+                val centerPixel = pixels[y * width + x]
+                val topPixel = pixels[(y - 1) * width + x]
+                val bottomPixel = pixels[(y + 1) * width + x]
+                val leftPixel = pixels[y * width + (x - 1)]
+                val rightPixel = pixels[y * width + (x + 1)]
                 
-                val lap = -4 * center + top + bottom + left + right
-                laplacian.add(lap)
+                // Convert to grayscale inline
+                fun toGray(p: Int): Int {
+                    val r = (p shr 16) and 0xff
+                    val g = (p shr 8) and 0xff
+                    val b = p and 0xff
+                    return ((0.299 * r + 0.587 * g + 0.114 * b).toInt())
+                }
+                
+                val center = toGray(centerPixel)
+                val top = toGray(topPixel)
+                val bottom = toGray(bottomPixel)
+                val left = toGray(leftPixel)
+                val right = toGray(rightPixel)
+                
+                // Apply Laplacian kernel
+                val lap = (-4 * center + top + bottom + left + right).toDouble()
+                
+                // Welford's algorithm update
+                count++
+                val delta = lap - mean
+                mean += delta / count
+                val delta2 = lap - mean
+                m2 += delta * delta2
             }
         }
         
-        if (laplacian.isEmpty()) return 0.0
+        return if (count > 1) m2 / count else 0.0
+    }
+    
+    /**
+     * Calculate mean luminance and glare in a single pass (memory efficient)
+     */
+    private data class LuminanceResult(val mean: Double, val glarePercent: Float)
+    
+    private fun calculateLuminanceAndGlare(bitmap: Bitmap): LuminanceResult {
+        val width = bitmap.width
+        val height = bitmap.height
+        val totalPixels = width * height
         
-        // Calculate variance
-        val mean = laplacian.average()
-        return laplacian.fold(0.0) { acc, value ->
-            val diff = value - mean
-            acc + (diff * diff)
-        } / laplacian.size
+        if (totalPixels == 0) return LuminanceResult(0.0, 0f)
+        
+        val pixels = IntArray(totalPixels)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        
+        var sum = 0.0
+        var brightCount = 0
+        
+        for (pixel in pixels) {
+            val r = (pixel shr 16) and 0xff
+            val g = (pixel shr 8) and 0xff
+            val b = pixel and 0xff
+            val luminance = 0.299 * r + 0.587 * g + 0.114 * b
+            
+            sum += luminance
+            if (luminance >= BRIGHT_PIXEL_THRESHOLD) {
+                brightCount++
+            }
+        }
+        
+        return LuminanceResult(
+            mean = sum / totalPixels,
+            glarePercent = (brightCount.toFloat() / totalPixels) * 100f
+        )
     }
     
     /**
      * Calculate mean luminance
      */
     private fun calculateMeanLuminance(bitmap: Bitmap): Double {
-        val pixels = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-        
-        var sum = 0.0
-        for (pixel in pixels) {
-            val r = (pixel shr 16) and 0xff
-            val g = (pixel shr 8) and 0xff
-            val b = pixel and 0xff
-            sum += 0.299 * r + 0.587 * g + 0.114 * b
-        }
-        
-        return sum / pixels.size
+        return calculateLuminanceAndGlare(bitmap).mean
     }
     
     /**
      * Calculate percentage of bright pixels (glare detection)
      */
     private fun calculateGlarePercent(bitmap: Bitmap): Float {
-        val pixels = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-        
-        var brightCount = 0
-        for (pixel in pixels) {
-            val r = (pixel shr 16) and 0xff
-            val g = (pixel shr 8) and 0xff
-            val b = pixel and 0xff
-            val luminance = (0.299 * r + 0.587 * g + 0.114 * b).toInt()
-            
-            if (luminance >= BRIGHT_PIXEL_THRESHOLD) {
-                brightCount++
-            }
-        }
-        
-        return (brightCount.toFloat() / pixels.size) * 100f
+        return calculateLuminanceAndGlare(bitmap).glarePercent
     }
 }

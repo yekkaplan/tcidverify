@@ -8,6 +8,7 @@ data class ScanResult(
     val backImage: ByteArray,            // Back image as JPEG bytes
     val mrzData: MRZData,                // Parsed MRZ information
     val authenticityScore: Float,        // 0.0 - 1.0 (physical authenticity)
+    val scoreDetails: ScoreDetails = ScoreDetails(), // Detailed score breakdown
     val metadata: ScanMetadata           // Scanning metadata
 ) {
     override fun equals(other: Any?): Boolean {
@@ -20,6 +21,7 @@ data class ScanResult(
         if (!backImage.contentEquals(other.backImage)) return false
         if (mrzData != other.mrzData) return false
         if (authenticityScore != other.authenticityScore) return false
+        if (scoreDetails != other.scoreDetails) return false
         if (metadata != other.metadata) return false
 
         return true
@@ -30,7 +32,18 @@ data class ScanResult(
         result = 31 * result + backImage.contentHashCode()
         result = 31 * result + mrzData.hashCode()
         result = 31 * result + authenticityScore.hashCode()
+        result = 31 * result + scoreDetails.hashCode()
         result = 31 * result + metadata.hashCode()
         return result
     }
 }
+
+/**
+ * Detailed score breakdown
+ */
+data class ScoreDetails(
+    val totalScore: Int = 0,
+    val checksumScore: Int = 0,
+    val structureScore: Int = 0,
+    val qualityScore: Int = 0
+)

@@ -24,7 +24,23 @@ android {
             )
         }
     }
-    
+
+    externalNativeBuild {
+        cmake {
+            path("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    defaultConfig {
+        externalNativeBuild {
+            cmake {
+                cppFlags("-std=c++17")
+                arguments("-DANDROID_STL=c++_shared")
+            }
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

@@ -44,14 +44,18 @@ data class DecisionResult(
         /** MRZ regex and line structure: +20 points */
         val mrzStructureScore: Int = 0,
         
-        /** MRZ ICAO checksum validation: +30 points */
+        /** MRZ ICAO checksum validation: +30-60 points
+         *  - Native (3 lines): 60 pts
+         *  - Java (3 lines): up to 30 pts
+         *  - Java (2 lines): up to 30 pts
+         */
         val mrzChecksumScore: Int = 0,
         
         /** T.C. Kimlik No algorithm validation: +10 points */
         val tcknAlgorithmScore: Int = 0
     ) {
-        val total: Int get() = aspectRatioScore + frontTextScore + mrzStructureScore + 
-                              mrzChecksumScore + tcknAlgorithmScore
+        val total: Int get() = (aspectRatioScore + frontTextScore + mrzStructureScore + 
+                              mrzChecksumScore + tcknAlgorithmScore).coerceAtMost(100)
     }
     
     /**
@@ -73,7 +77,7 @@ data class DecisionResult(
         const val MAX_ASPECT_RATIO_SCORE = 20
         const val MAX_FRONT_TEXT_SCORE = 20
         const val MAX_MRZ_STRUCTURE_SCORE = 20
-        const val MAX_MRZ_CHECKSUM_SCORE = 30
+        const val MAX_MRZ_CHECKSUM_SCORE = 60 // Increased for native validation
         const val MAX_TCKN_ALGORITHM_SCORE = 10
         const val MAX_TOTAL_SCORE = 100
     }
