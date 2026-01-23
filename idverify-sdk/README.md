@@ -1,109 +1,64 @@
 # ID Verify SDK
 
-Turkish ID Card Scanner SDK - Multi-Layer Architecture
+**Advanced Turkish ID Card Scanner SDK** - Built with Kotlin, Native C++ (OpenCV), and ML Kit.
+
+## Key Features 🚀
+
+### 🛡️ Robust & Reliable
+- **Hybrid Architecture:** Combines Native C++ image processing with ML Kit for maximum accuracy.
+- **Smart Fallback:** Automatically switches between "ROI Optimization" and "Full Frame" modes to ensure scannability in all conditions.
+- **Auto-Correction:** Uses MRZ checksums to mathematically correct common OCR errors (e.g., fixing `0` vs `O`, `5` vs `S`).
+
+### ⚡ Fast & Fluid
+- **Native Preprocessing:** Uses Gaussian Blur and Adaptive Thresholding (OpenCV) to clean up noisy camera frames before OCR.
+- **Multi-Frame Validation:** Verifies data across consecutive frames to prevent "flickering" errors.
+- **Smart Name Parsing:** Correctly handles multi-word names even if MRZ separators are misread.
+
+### 🔒 Secure & Offline
+- **100% Offline:** All processing happens on-device. No data is sent to any server.
+- **Privacy First:** No images are stored permanently.
+
+---
 
 ## Project Structure
 
 ```
 idverify-sdk/
-├── android/                    # Native Android SDK (Kotlin)
-│   ├── src/main/java/com/idverify/sdk/
-│   │   ├── IDScannerModule.kt         # Main scanner engine
-│   │   ├── detector/                  # ML Kit ID detection
-│   │   ├── mrz/                       # MRZ parsing (ICAO Doc 9303)
-│   │   └── authenticity/              # Physical validation
-│   ├── build.gradle.kts
-│   └── ...
+├── android/                    # Native Android SDK
+│   ├── src/main/cpp/          # Native C++ (OpenCV) Logic
+│   │   ├── VisionProcessor.cpp
+│   │   └── native-lib.cpp
+│   ├── src/main/java/         # Kotlin Logic
+│   │   ├── autocapture/       # Smart Capture Analyzer
+│   │   └── ...
 │
-└── react-native/              # React Native Library
-    ├── android/               # RN Native Bridge (connects to android SDK)
-    ├── src/
-    │   ├── components/        # IDScannerView (Camera preview)
-    │   ├── hooks/            # useIDScanner (React Hook)
-    │   ├── types.ts          # TypeScript definitions
-    │   └── index.tsx         # Public API exports
-    ├── package.json
-    └── tsconfig.json
+└── react-native/              # RN Bridge & Components
 ```
-
-## SDK Layers
-
-### 1. Android Native SDK (`android/`)
-
-**Technology:** Kotlin, CameraX, ML Kit Text Recognition  
-**Purpose:** Core ID scanning functionality
-
-**Features:**
-- Real-time ID card detection using ML Kit
-- MRZ parsing compliant with ICAO Doc 9303 standards
-- Physical authenticity validation with heuristics
-- Dual-side scanning (front & back)
-- Image quality checks (blur, glare detection)
-
-**Build:**
-```bash
-./gradlew :idverify-sdk:android:build
-```
-
-### 2. React Native Bridge (`react-native/android/`)
-
-**Technology:** Kotlin, React Native Native Modules  
-**Purpose:** Bridges native Android SDK to React Native
-
-**Responsibilities:**
-- Exposes `IDScannerModule` to JavaScript
-- Event emission for scan status updates
-- Image data conversion (Base64 encoding)
-
-### 3. React Native Library (`react-native/`)
-
-**Technology:** TypeScript, React Native  
-**Purpose:** JavaScript/TypeScript API for React Native apps
-
-**Components:**
-- `<IDScannerView>` - Camera preview component
-- `useIDScanner()` - React Hook for scan lifecycle management
-
-**API Example:**
-```typescript
-import { IDScannerView, useIDScanner } from 'react-native-id-scanner';
-
-const { startScan, result, status } = useIDScanner({
-  onComplete: (scanResult) => {
-    console.log('MRZ Data:', scanResult.mrzData);
-    console.log('Authenticity:', scanResult.authenticityScore);
-  }
-});
-
-return <IDScannerView active={true} />;
-```
-
-**Build:**
-```bash
-cd idverify-sdk/react-native
-npm install
-npm run typescript  # Type checking
-npm run prepare     # Build all targets
-```
-
-## Development Workflow
-
-1. **Modify Native Code:** Edit files in `idverify-sdk/android/src/`
-2. **Build Native SDK:** `./gradlew :idverify-sdk:android:build`
-3. **Update RN Bridge:** Sync native module exports in `react-native/android/`
-4. **Update TypeScript Types:** Keep `react-native/src/types.ts` in sync
-5. **Build RN Library:** Run `npm run prepare` in `react-native/`
 
 ## Integration
 
-To use the SDK in a React Native app:
+### Android Native
+
+Add the dependency to your `build.gradle.kts`:
+
+```kotlin
+implementation(project(":idverify-sdk:android"))
+```
+
+### React Native
 
 ```bash
-# From your RN app directory
 npm install file:../idverify-sdk/react-native
 ```
 
-## Documentation
+See [React Native README](react-native/README.md) for usage details.
 
-- [TC ID Specification](../TC_ID_SPEC.md) - Turkish ID card format details
-- [React Native README](react-native/README.md) - RN library usage guide
+---
+
+## Technical Specs
+
+For detailed technical specifications of the Turkish ID Card (TD1 format) and the validation algorithms used, please refer to:
+👉 **[TC_ID_SPEC.md](TC_ID_SPEC.md)**
+
+For architecture details:
+👉 **[ARCHITECTURE.md](ARCHITECTURE.md)**
