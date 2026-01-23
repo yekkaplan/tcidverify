@@ -10,7 +10,6 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import com.idverify.sdk.api.models.*
 import com.idverify.sdk.decision.DecisionEngine
 import com.idverify.sdk.decision.DecisionResult
 import com.idverify.sdk.decision.ValidationError
