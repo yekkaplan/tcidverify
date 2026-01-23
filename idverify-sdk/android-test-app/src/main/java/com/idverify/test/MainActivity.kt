@@ -245,19 +245,35 @@ class MainActivity : AppCompatActivity() {
         sb.append("✅ DOĞRULAMA TAMAMLANDI\n\n")
         
         frontResult?.let {
-            sb.append("--- ÖN YÜZ ---\n")
+            sb.append("━━━ ÖN YÜZ VERİLERİ ━━━\n")
             sb.append("TCKN: ${it.extractedData["tckn"] ?: "---"}\n")
-            sb.append("Durum: Doğrulandı\n\n")
+            sb.append("Soyadı: ${it.extractedData["surname"] ?: "---"}\n")
+            sb.append("Adı: ${it.extractedData["name"] ?: "---"}\n")
+            sb.append("Doğum Tarihi: ${it.extractedData["birthdate"] ?: "---"}\n")
+            sb.append("Seri No: ${it.extractedData["serial"] ?: "---"}\n")
+            sb.append("\n")
         }
         
         backResult?.let {
-            sb.append("--- ARKA YÜZ ---\n")
-            sb.append("MRZ Skoru: ${it.mrzScore}/60\n")
-            sb.append("TCKN (MRZ): ${it.extractedData["tckn"] ?: "---"}\n\n")
-            sb.append("Data Line 1: ${it.extractedData["mrz_line1"]}\n")
-            sb.append("Data Line 2: ${it.extractedData["mrz_line2"]}\n")
-            sb.append("Data Line 3: ${it.extractedData["mrz_line3"]}\n")
+            sb.append("━━━ ARKA YÜZ VERİLERİ (MRZ) ━━━\n")
+            sb.append("MRZ Skoru: ${it.mrzScore}/60 ${if (it.extractedData["mrzValid"] == "true") "✓" else ""}\n")
+            sb.append("Belge No: ${it.extractedData["documentNumber"] ?: "---"}\n")
+            sb.append("Doğum Tarihi: ${it.extractedData["birthDate"] ?: "---"}\n")
+            sb.append("Son Geçerlilik: ${it.extractedData["expiryDate"] ?: "---"}\n")
+            sb.append("Cinsiyet: ${it.extractedData["sex"] ?: "---"}\n")
+            sb.append("Soyadı (MRZ): ${it.extractedData["surnameFromMRZ"] ?: "---"}\n")
+            sb.append("Adı (MRZ): ${it.extractedData["nameFromMRZ"] ?: "---"}\n")
+            
+            val tcknFromMRZ = it.extractedData["tcknFromMRZ"]
+            if (!tcknFromMRZ.isNullOrEmpty()) {
+                sb.append("TCKN (MRZ): $tcknFromMRZ\n")
+            }
+            sb.append("\n")
         }
+        
+        sb.append("━━━━━━━━━━━━━━━━━━━━━━\n")
+        val totalFields = (frontResult?.extractedData?.size ?: 0) + (backResult?.extractedData?.size ?: 0)
+        sb.append("Toplam $totalFields alan başarıyla okundu.\n")
         
         resultInfo.text = sb.toString()
         resultTitle.setTextColor(Color.parseColor("#4CAF50"))

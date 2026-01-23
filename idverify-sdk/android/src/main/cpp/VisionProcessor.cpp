@@ -414,6 +414,31 @@ Mat VisionProcessor::extractROI(const Mat& warpedCard, ROIType type, bool isBack
         return roi;
     }
     
+    // Advanced preprocessing for MRZ to improve OCR accuracy
+    if (type == ROIType::MRZ) {
+        Mat gray;
+        if (roi.channels() == 3 || roi.channels() == 4) {
+            cvtColor(roi, gray, roi.channels() == 4 ? COLOR_BGRA2GRAY : COLOR_BGR2GRAY);
+        } else {
+            gray = roi.clone();
+        }
+        
+        // 1. Gaussian Blur (Light): Removes high-freq noise without destroying structure
+        // Safer than Bilateral for thin characters like <
+        Mat blurred;
+        GaussianBlur(gray, blurred, Size(3, 3), 0);
+        
+        // 2. Adaptive Threshold (Local) optimized for MRZ
+        // Block 13: Local enough for thin chars
+        // C 10: High contrast requirement (removes background noise)
+        Mat binary;
+        adaptiveThreshold(blurred, binary, 255, 
+            ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 
+            13, 10);
+            
+        return binary;
+    }
+    
     // Apply region-specific preprocessing
     return binarizeROI(roi, region);
 }

@@ -30,8 +30,119 @@ class AutoCaptureAnalyzer(
         const val MIN_STABILITY = 0.15f
         const val MAX_GLARE = 50
         
+        // Stricter thresholds for back-side MRZ (requires higher stability)
+        const val MIN_STABILITY_BACK = 0.20f  // 20% stability for MRZ (Lowered for usability)
+        const val STABILITY_FRAMES_BACK = 3   // 3 stable frames
+        
         const val STABILITY_FRAMES = 2
         const val MAX_VERIFY_ATTEMPTS = 5
+        
+        /**
+         * Correct common OCR errors for Turkish ID cards
+         * - For TCKN: Only digits (I→1, O→0, S→5, etc.)
+         * - For MRZ: Specific character set
+         */
+        fun correctOCRErrors(text: String, forTCKN: Boolean = false): String {
+            var corrected = text.uppercase()
+            
+            if (forTCKN) {
+                // TCKN should only contain digits
+                corrected = corrected
+                    .replace('I', '1')
+                    .replace('L', '1')
+                    .replace('O', '0')
+                    .replace('D', '0')
+                    .replace('Q', '0')
+                    .replace('S', '5')
+                    .replace('Z', '2')
+                    .replace('G', '6')
+                    .replace('B', '8')
+                    .filter { it.isDigit() }
+            } else {
+                // MRZ character corrections
+                corrected = corrected
+                    .replace('0', 'O') // In MRZ, O is more common than 0 in names
+                    .replace('.', '<')
+                    .replace(' ', '<')
+                    .replace('«', '<')  // OCR often reads < as «
+            }
+            
+            return corrected
+        }
+        
+        /**
+         * Normalizes an MRZ line to exactly 30 characters (ICAO TD1 standard).
+         * Handles OCR errors that produce 28-32 character lines.
+         * @param line Raw MRZ line from OCR (after correction)
+         * @return Normalized 30-character line, or null if not a valid MRZ candidate
+         */
+        fun normalizeMRZLine(line: String): String? {
+            // Only process lines that are close to 30 characters (allow ±2 for OCR errors)
+            if (line.length !in 28..32) return null
+            
+            // Must contain only valid MRZ characters (A-Z, 0-9, <)
+            // Note: Turkish characters (İ, Ç, etc.) should NOT be in MRZ, they get transliterated
+            if (!line.matches(Regex("^[A-Z0-9<]+$"))) return null
+            
+            return when {
+                line.length == 30 -> line  // Perfect, no change needed
+                line.length < 30 -> line.padEnd(30, '<')  // Pad with '<' to reach 30
+                else -> line.take(30)  // Trim to 30 (remove excess '<' at end)
+            }
+        }
+        
+        /**
+         * Calculates MRZ checksum using 7-3-1 weighting
+         */
+        fun calculateMRZChecksum(data: String): Int {
+            val weights = intArrayOf(7, 3, 1)
+            var sum = 0
+            for (i in data.indices) {
+                val c = data[i]
+                val value = when {
+                    c.isDigit() -> c - '0'
+                    c in 'A'..'Z' -> c - 'A' + 10
+                    c == '<' -> 0
+                    else -> 0
+                }
+                sum += value * weights[i % 3]
+            }
+            return sum % 10
+        }
+
+        /**
+         * Tries to correct a string to match the given check digit by swapping common OCR error characters
+         */
+        fun tryCorrectWithChecksum(raw: String, checkDigit: Int): String? {
+            if (calculateMRZChecksum(raw) == checkDigit) return raw
+            
+            // Try correcting common OCR errors one by one
+            val replacements = mapOf(
+                'O' to '0', '0' to 'O',
+                'I' to '1', '1' to 'I',
+                'L' to '1',
+                'S' to '5', '5' to 'S',
+                'Z' to '2', '2' to 'Z',
+                'B' to '8', '8' to 'B',
+                'D' to '0', 
+                'Q' to '0',
+                'G' to '6', '6' to 'G'
+            )
+            
+            val chars = raw.toCharArray()
+            for (i in chars.indices) {
+                val original = chars[i]
+                if (replacements.containsKey(original)) {
+                    chars[i] = replacements[original]!!
+                    if (calculateMRZChecksum(String(chars)) == checkDigit) {
+                        Log.d(TAG, "Checksum correction success: $raw -> ${String(chars)}")
+                        return String(chars)
+                    }
+                    chars[i] = original // Backtrack
+                }
+            }
+            return null
+        }
     }
 
     enum class CaptureState { SEARCHING, ALIGNING, VERIFYING, CAPTURED, ERROR }
@@ -52,6 +163,18 @@ class AutoCaptureAnalyzer(
         val isValid: Boolean
     )
 
+    /**
+     * Represents a single MRZ reading from one frame
+     * Used for multi-frame validation to select the best result
+     */
+    data class MRZCandidate(
+        val lines: List<String>,           // 3 MRZ lines
+        val score: Int,                    // Native checksum score
+        val tckn: String,                  // Extracted TCKN for matching
+        val extractedData: Map<String, String>,  // All parsed fields
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
     private var currentState: CaptureState? = null
     private var stableFrameCount = 0
     private var verifyAttempts = 0
@@ -63,6 +186,11 @@ class AutoCaptureAnalyzer(
     }
 
     private var frameCount = 0L
+    
+    // Multi-frame MRZ validation
+    private val mrzCandidates = mutableListOf<MRZCandidate>()
+    private val MIN_MRZ_FRAMES = 2  // Require 2 matching frames (Reduced from 3 for speed)
+    private val MRZ_CANDIDATE_TIMEOUT_MS = 10000L  // Keep candidates for 10s (Increased from 2s to allow slower scans)
 
     override fun analyze(image: ImageProxy) {
         if (isProcessing.get()) {
@@ -125,7 +253,11 @@ class AutoCaptureAnalyzer(
             return
         }
         
-        if (stability < MIN_STABILITY) {
+        // Use stricter stability for back side (MRZ is sensitive to blur)
+        val minStability = if (isBackSide) MIN_STABILITY_BACK else MIN_STABILITY
+        val requiredFrames = if (isBackSide) STABILITY_FRAMES_BACK else STABILITY_FRAMES
+
+        if (stability < minStability) {
             updateState(CaptureState.ALIGNING, "Sabit Tutun")
             emitQuality(cardConfidence, blurScore, stability, glareScore, "Sabitle")
             stableFrameCount = 0
@@ -133,7 +265,7 @@ class AutoCaptureAnalyzer(
         }
 
         stableFrameCount++
-        if (stableFrameCount < STABILITY_FRAMES) {
+        if (stableFrameCount < requiredFrames) {
             updateState(CaptureState.ALIGNING, "Bekleyin...")
             emitQuality(cardConfidence, blurScore, stability, glareScore, "Hazır...")
             return
@@ -174,8 +306,12 @@ class AutoCaptureAnalyzer(
             
             Log.d(TAG, "OCR Raw Text: $text")
             
+            // Apply OCR error correction for TCKN
+            val correctedText = correctOCRErrors(text, forTCKN = true)
+            Log.d(TAG, "OCR Corrected Text: $correctedText")
+            
             // Find all potential 11-digit numbers
-            val candidates = Regex("[0-9]{11}").findAll(text).map { it.value }.toList()
+            val candidates = Regex("[0-9]{11}").findAll(correctedText).map { it.value }.toList()
             Log.d(TAG, "OCR Candidates: $candidates")
             
             for (tckn in candidates) {
@@ -266,62 +402,120 @@ class AutoCaptureAnalyzer(
             val rawText = result.text.replace("\n", " ")
             Log.d(TAG, "Back Raw Text (ROI): $rawText")
 
-            var lines = result.text.lines().map { it.trim().uppercase() }.filter { it.length > 10 }
+            var lines = result.text.lines().map { it.trim().uppercase() }.filter { it.isNotEmpty() }
             Log.d(TAG, "Back Lines (ROI): $lines")
             
-            // Fallback: If ROI failed or returned nothing, try full-frame OCR
-            if (lines.size < 2) {
-                Log.d(TAG, "ROI failed, trying full frame OCR for Back side...")
+            // Initial normalization attempt on ROI result
+            var correctedLines = lines.map { correctOCRErrors(it, forTCKN = false) }
+            var normalizedMRZLines = correctedLines.mapNotNull { normalizeMRZLine(it) }
+
+            // Fallback: If ROI normalization yielded < 3 valid lines, try full-frame OCR
+            // This fixes the issue where ROI returns garbage text (but enough lines) and we skip Full Frame
+            if (normalizedMRZLines.size < 3) {
+                Log.d(TAG, "ROI Yielded only ${normalizedMRZLines.size} valid lines. Falling back to Full Frame...")
                 val fullResult = textRecognizer.process(InputImage.fromBitmap(warped, 0)).await()
                 val fullRaw = fullResult.text.replace("\n", " ")
                 Log.d(TAG, "Back Raw Text (Full): $fullRaw")
-                lines = fullResult.text.lines().map { it.trim().uppercase() }.filter { it.length > 15 }
+                
+                lines = fullResult.text.lines().map { it.trim().uppercase() }.filter { it.isNotEmpty() }
                 Log.d(TAG, "Back Lines (Full): $lines")
-            }
-
-            // Filter for MRZ-like patterns (lines starting with I<TUR or containing date patterns)
-            val mrzCandidates = lines.filter { line ->
-                line.contains("I<TUR") || 
-                line.contains(Regex("[0-9]{6}")) || // Date pattern YYMMDD
-                line.contains("<<") || // MRZ filler
-                (line.length >= 25 && line.count { it == '<' } >= 3) // Typical MRZ characteristics
+                
+                // Re-process full frame lines
+                correctedLines = lines.map { correctOCRErrors(it, forTCKN = false) }
+                normalizedMRZLines = correctedLines.mapNotNull { normalizeMRZLine(it) }
             }
             
-            Log.d(TAG, "MRZ Candidates: $mrzCandidates")
+            Log.d(TAG, "Final Normalized MRZ Lines (30 char each): $normalizedMRZLines")
 
-            // Need at least 2 valid MRZ lines
-            if (mrzCandidates.size >= 2) {
-                // Prepare lines for native validation (pad to ensure we have 3 lines)
-                val line1 = mrzCandidates.getOrNull(0) ?: ""
-                val line2 = mrzCandidates.getOrNull(1) ?: ""
-                val line3 = mrzCandidates.getOrNull(2) ?: ""
+            // CRITICAL: Turkish ID cards use TD1 format - MUST have exactly 3 lines
+            if (normalizedMRZLines.size >= 3) {
+                // Take first 3 valid lines
+                val line1 = normalizedMRZLines[0]
+                val line2 = normalizedMRZLines[1]
+                var line3 = normalizedMRZLines[2]
                 
+                // Fix common OCR error in Line 3: Separator << read as <C, C<, K<, etc.
+                line3 = line3.replace("<C", "<<")
+                             .replace("C<", "<<")
+                             .replace("<K", "<<")
+                             .replace("K<", "<<")
+                
+                // Validate TD1 format structure
+                val isValidTD1 = line1.startsWith("I<TUR") && 
+                                 line2.length == 30 && 
+                                 line3.length == 30
+                
+                if (!isValidTD1) {
+                    Log.d(TAG, "Invalid TD1 format: Line1 doesn't start with I<TUR or wrong lengths")
+                    return@withContext null
+                }
+                
+                Log.d(TAG, "Valid TD1 MRZ found!")
                 Log.d(TAG, "Validating MRZ: L1='$line1', L2='$line2', L3='$line3'")
                 
                 // Use native MRZ validator (expects List<String>)
                 val mrzScore = NativeProcessor.validateMRZ(listOf(line1, line2, line3))
                 Log.d(TAG, "MRZ Score from native: $mrzScore")
                 
-                // Accept if score is reasonable (at least 3 checksums valid)
-                if (mrzScore >= 45) { // Stricter: at least 3 checksums (15+15+15)
+                // Accept if score is reasonable (balanced threshold)
+                if (mrzScore >= 40) { // Lowered from 45: at least 2-3 checksums valid
                     // Parse MRZ data
                     val extractedData = mutableMapOf<String, String>()
                     extractedData["mrzScore"] = mrzScore.toString()
                     extractedData["mrzValid"] = "true"
                     
                     // Parse Line 1: I<TUR[DOCNUM9][CHK]...
+                    // Parse Line 1: I<TUR[DOCNUM9][CHK]...
                     if (line1.length >= 15) {
-                        val docNum = line1.substring(5, 14).replace("<", "").trim()
+                        // Document number is at positions 5-14 (9 chars + 1 check digit)
+                        val docNumRaw = line1.substring(5, 14)
+                        val checkDigitChar = line1[14]
+                        
+                        var processedDocNum = docNumRaw
+                        
+                        // Try to correct using checksum if check digit is valid
+                        if (checkDigitChar.isDigit()) {
+                            val checkDigit = checkDigitChar - '0'
+                            val corrected = tryCorrectWithChecksum(docNumRaw, checkDigit)
+                            if (corrected != null) {
+                                processedDocNum = corrected
+                            } else {
+                                Log.w(TAG, "DocNum Checksum Failed. Raw: $docNumRaw, Check: $checkDigit, Calc: ${calculateMRZChecksum(docNumRaw)}")
+                            }
+                        }
+                        
+                        // Clean up filler chars for result
+                        val docNum = processedDocNum.replace("<", "").trim()
                         if (docNum.isNotEmpty()) {
                             extractedData["documentNumber"] = docNum
                             Log.d(TAG, "Parsed Document Number: $docNum")
                         }
                     }
                     
+                    // Extract TCKN from Line 1 (Optional Data field: positions 15-29)
+                    // Format: [Optional Data (15 chars)]
+                    // Turkey uses this for TCKN, but sometimes there is padding << before it
+                    if (line1.length >= 26) {
+                        val optionalData = line1.substring(15, 30.coerceAtMost(line1.length))
+                        // Find first alignment of 11 digits
+                        // Expand O->0 correction to whole optional field
+                        val correctedOptional = optionalData.replace('O', '0')
+                        val tcknMatch = Regex("[0-9]{11}").find(correctedOptional)
+                        
+                        if (tcknMatch != null) {
+                            val tckn = tcknMatch.value
+                            if (NativeProcessor.validateTCKNNative(tckn)) {
+                                extractedData["tcknFromMRZ"] = tckn
+                                Log.d(TAG, "Parsed TCKN from MRZ Line 1: $tckn")
+                            }
+                        }
+                    }
+                    
                     // Parse Line 2: [DOB6][CHK][SEX][EXP6][CHK]TUR...
                     if (line2.length >= 15) {
-                        // Birth Date (positions 0-5)
-                        val dobStr = line2.substring(0, 6).replace(Regex("[^0-9]"), "")
+                        // Birth Date (positions 0-5) - MUST be all digits, so O→0
+                        val dobRaw = line2.substring(0, 6).replace('O', '0')
+                        val dobStr = dobRaw.replace(Regex("[^0-9]"), "")
                         if (dobStr.length == 6) {
                             try {
                                 val dob = "${dobStr.substring(4, 6)}.${dobStr.substring(2, 4)}.19${dobStr.substring(0, 2)}"
@@ -332,20 +526,22 @@ class AutoCaptureAnalyzer(
                             }
                         }
                         
-                        // Sex (position 7)
+                        // Sex (position 7) - should be M, F, or < (unknown)
                         if (line2.length > 7) {
-                            val sex = when (line2[7]) {
+                            val sexChar = line2[7]
+                            val sex = when (sexChar) {
                                 'M' -> "Erkek"
-                                'F' -> "Kadın"
-                                else -> line2[7].toString()
+                                'F', '0' -> "Kadın"  // 0 in MRZ means Female in some formats
+                                else -> sexChar.toString()
                             }
                             extractedData["sex"] = sex
                             Log.d(TAG, "Parsed Sex: $sex")
                         }
                         
-                        // Expiry Date (positions 8-13)
+                        // Expiry Date (positions 8-13) - MUST be all digits, so O→0
                         if (line2.length >= 14) {
-                            val expStr = line2.substring(8, 14).replace(Regex("[^0-9]"), "")
+                            val expRaw = line2.substring(8, 14).replace('O', '0')
+                            val expStr = expRaw.replace(Regex("[^0-9]"), "")
                             if (expStr.length == 6) {
                                 try {
                                     val exp = "${expStr.substring(4, 6)}.${expStr.substring(2, 4)}.20${expStr.substring(0, 2)}"
@@ -357,12 +553,20 @@ class AutoCaptureAnalyzer(
                             }
                         }
                         
-                        // TCKN from MRZ (positions 18-28, 11 digits)
-                        if (line2.length >= 29) {
-                            val tckn = line2.substring(18, 29).replace(Regex("[^0-9]"), "")
-                            if (tckn.length == 11) {
-                                extractedData["tcknFromMRZ"] = tckn
-                                Log.d(TAG, "Parsed TCKN from MRZ: $tckn")
+                        // TCKN from MRZ (positions 18-28, 11 digits) in Line 2
+                        // Search in the valid range for TCKN
+                        if (line2.length >= 18) {
+                            // Look in the second half (after optional data start)
+                            val searchRegion = line2.substring(15.coerceAtMost(line2.length))
+                            val correctedRegion = searchRegion.replace('O', '0')
+                            
+                            val tcknMatch = Regex("[0-9]{11}").find(correctedRegion)
+                            if (tcknMatch != null) {
+                                val tckn = tcknMatch.value
+                                if (NativeProcessor.validateTCKNNative(tckn)) {
+                                    extractedData["tcknFromMRZ"] = tckn
+                                    Log.d(TAG, "Parsed TCKN from MRZ Line 2: $tckn")
+                                }
                             }
                         }
                     }
@@ -375,24 +579,65 @@ class AutoCaptureAnalyzer(
                             Log.d(TAG, "Parsed Surname from MRZ: ${nameParts[0]}")
                         }
                         if (nameParts.size > 1) {
-                            extractedData["nameFromMRZ"] = nameParts[1].replace("<", " ").trim()
-                            Log.d(TAG, "Parsed Name from MRZ: ${nameParts[1]}")
+                            val nameRaw = nameParts.drop(1).joinToString(" ")
+                            extractedData["nameFromMRZ"] = nameRaw.replace("<", " ").trim()
+                            Log.d(TAG, "Parsed Name from MRZ: $nameRaw")
                         }
                     }
                     
                     Log.d(TAG, "All MRZ extracted data: $extractedData")
                     
-                    return@withContext CaptureResult(
-                        warped, 
-                        extractedData, 
-                        mrzScore, 
-                        true
-                    )
+                    // Multi-frame validation: Don't accept immediately
+                    // Instead, add to candidates and check if we have 3 matching frames
+                    val tckn = extractedData["tcknFromMRZ"] ?: ""
+                    
+                    if (tckn.isNotEmpty() && tckn.length == 11) {
+                        // Add this candidate to the list
+                        val candidate = MRZCandidate(
+                            lines = listOf(line1, line2, line3),
+                            score = mrzScore,
+                            tckn = tckn,
+                            extractedData = extractedData
+                        )
+                        
+                        // Remove old candidates (older than 2 seconds)
+                        val now = System.currentTimeMillis()
+                        mrzCandidates.removeAll { now - it.timestamp > MRZ_CANDIDATE_TIMEOUT_MS }
+                        
+                        // Add new candidate
+                        mrzCandidates.add(candidate)
+                        Log.d(TAG, "Added MRZ candidate. Total candidates: ${mrzCandidates.size}")
+                        
+                        // Check if we have at least MIN_MRZ_FRAMES with the same TCKN
+                        val matchingCandidates = mrzCandidates.filter { it.tckn == tckn }
+                        Log.d(TAG, "Matching TCKN candidates: ${matchingCandidates.size} (need $MIN_MRZ_FRAMES)")
+                        
+                        if (matchingCandidates.size >= MIN_MRZ_FRAMES) {
+                            // Select the best candidate (highest score)
+                            val bestCandidate = matchingCandidates.maxByOrNull { it.score }!!
+                            Log.d(TAG, "✅ Multi-frame validation passed! Best score: ${bestCandidate.score}")
+                            
+                            // Clear candidates for next capture
+                            mrzCandidates.clear()
+                            
+                            return@withContext CaptureResult(
+                                warped,
+                                bestCandidate.extractedData,
+                                bestCandidate.score,
+                                true
+                            )
+                        } else {
+                            Log.d(TAG, "⏳ Waiting for more matching frames...")
+                            return@withContext null  // Continue capturing
+                        }
+                    } else {
+                        Log.d(TAG, "Invalid TCKN extracted: $tckn")
+                    }
                 } else {
                     Log.d(TAG, "MRZ validation failed. Score too low: $mrzScore")
                 }
             } else {
-                Log.d(TAG, "Not enough MRZ candidates found: ${mrzCandidates.size}")
+                Log.d(TAG, "Not enough MRZ candidates found: ${normalizedMRZLines.size}")
             }
             
             null
