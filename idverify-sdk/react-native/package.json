@@ -1,55 +1,50 @@
 {
-  "name": "react-native-id-scanner",
+  "name": "@idverify/react-native-sdk",
   "version": "1.0.0",
-  "description": "Turkish ID Card Scanner SDK for React Native",
-  "main": "lib/commonjs/index.js",
-  "module": "lib/module/index.js",
-  "types": "lib/typescript/index.d.ts",
-  "react-native": "src/index.tsx",
-  "source": "src/index.tsx",
-  "files": [
-    "src",
-    "lib",
-    "android",
-    "!**/__tests__",
-    "!**/__fixtures__",
-    "!**/__mocks__"
-  ],
+  "description": "React Native bridge for IDVerify SDK - Turkish ID card verification",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
-    "typescript": "tsc --noEmit",
-    "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "prepare": "bob build"
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "react-native",
-    "id-scanner",
-    "mrz",
-    "document-scanner",
+    "id-verification",
     "turkish-id",
+    "mrz",
     "ocr"
   ],
-  "repository": "https://github.com/your-org/react-native-id-scanner",
-  "author": "Your Name <your@email.com>",
+  "author": "Your Name <your.email@example.com>",
   "license": "MIT",
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": ">=18.0.0",
+    "react-native": ">=0.76.0"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.25.0"
   },
   "devDependencies": {
-    "@types/react": "^18.0.0",
-    "@types/react-native": "^0.72.0",
-    "react": "18.2.0",
-    "react-native": "^0.76.5",
-    "react-native-builder-bob": "^0.20.0",
-    "typescript": "^5.0.0"
+    "@types/react": "^18.2.6",
+    "@types/react-native": "^0.76.0",
+    "typescript": "^5.0.4"
   },
-  "react-native-builder-bob": {
-    "source": "src",
-    "output": "lib",
-    "targets": [
-      "commonjs",
-      "module",
-      "typescript"
-    ]
+  "files": [
+    "lib/",
+    "android/",
+    "src/",
+    "react-native.config.js",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/idverify-sdk"
+  },
+  "react-native": {
+    "android": {
+      "sourceDir": "./android",
+      "packageImportPath": "import com.idverify.reactnative.IdVerifyPackage;"
+    }
   }
 }

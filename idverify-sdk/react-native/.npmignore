@@ -1,0 +1,28 @@
+# NPM Publish Configuration
+# Files to exclude when publishing to NPM
+
+# Development files
+node_modules/
+.vscode/
+.idea/
+.DS_Store
+
+# Build artifacts (Android)
+android/build/
+android/.gradle/
+android/.cxx/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

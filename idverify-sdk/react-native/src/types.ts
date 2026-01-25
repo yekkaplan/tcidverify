@@ -1,68 +1,104 @@
 /**
- * TypeScript type definitions for ID Scanner SDK
+ * TypeScript type definitions for IDVerify React Native SDK
+ * 
+ * This file defines all domain models and types used by the SDK.
+ * Follows AGENTS.md architecture - deterministic, no LLM logic.
  */
 
-export interface MRZData {
-  documentType: string;
-  issuingCountry: string;
-  documentNumber: string;
-  birthDate: string;
-  sex: 'M' | 'F';
-  expiryDate: string;
-  nationality: string;
-  surname: string;
-  givenNames: string;
-  checksumValid: boolean;
-  rawMRZ: string[];
+/**
+ * Capture state enum matching native AutoCaptureAnalyzer.CaptureState
+ */
+export enum CaptureState {
+  SEARCHING = 'SEARCHING',
+  ALIGNING = 'ALIGNING',
+  VERIFYING = 'VERIFYING',
+  CAPTURED = 'CAPTURED',
+  ERROR = 'ERROR',
 }
 
-export interface ScanMetadata {
-  scanDuration: number;
-  frontCaptureTimestamp: number;
-  backCaptureTimestamp: number;
+/**
+ * Quality metrics from native AutoCaptureAnalyzer.QualityMetrics
+ */
+export interface QualityMetrics {
+  cardConfidence: number;
   blurScore: number;
+  stability: number;
   glareScore: number;
+  state: CaptureState;
+  message: string;
 }
 
-export interface ScanResult {
-  frontImage: string;           // Base64 encoded JPEG
-  backImage: string;            // Base64 encoded JPEG
-  mrzData: MRZData;
-  authenticityScore: number;    // 0.0 - 1.0
-  metadata: ScanMetadata;
+/**
+ * Extracted data from ID card
+ * Maps to native AutoCaptureAnalyzer.CaptureResult.extractedData
+ */
+export interface ExtractedData {
+  // Front side fields
+  tckn?: string;
+  surname?: string;
+  name?: string;
+  birthdate?: string;
+  serial?: string;
+  
+  // Back side (MRZ) fields
+  tcknFromMRZ?: string;
+  documentNumber?: string;
+  surnameFromMRZ?: string;
+  nameFromMRZ?: string;
+  birthDate?: string; // From MRZ
+  expiryDate?: string;
+  sex?: string;
+  mrzScore?: string;
+  mrzValid?: string;
 }
 
-export enum ScanStatus {
-  IDLE = 'IDLE',
-  DETECTING_FRONT = 'DETECTING_FRONT',
-  FRONT_CAPTURED = 'FRONT_CAPTURED',
-  DETECTING_BACK = 'DETECTING_BACK',
-  BACK_CAPTURED = 'BACK_CAPTURED',
-  PROCESSING = 'PROCESSING',
-  COMPLETED = 'COMPLETED',
-  ERROR = 'ERROR'
+/**
+ * Capture result from native AutoCaptureAnalyzer.CaptureResult
+ */
+export interface CaptureResult {
+  isBackSide: boolean;
+  extractedData: ExtractedData;
+  mrzScore: number;
+  isValid: boolean;
 }
 
-export interface StatusUpdate {
-  status: ScanStatus;
-  progress: number;            // 0.0 - 1.0
-  message?: string;
+/**
+ * SDK configuration
+ */
+export interface IdVerifyConfig {
+  // Future configuration options
+  // For now, empty but extensible
 }
 
-export interface ImageCapture {
-  image: string;               // Base64 encoded
-  qualityScore: number;        // 0.0 - 1.0
+/**
+ * State change event payload
+ */
+export interface StateChangeEvent {
+  state: CaptureState;
+  message: string;
 }
 
-export interface ScanError {
+/**
+ * Error event payload
+ */
+export interface ErrorEvent {
   code: string;
   message: string;
-  details?: string;
 }
 
-export type ScanEventType =
-  | 'IDScanner.StatusChanged'
-  | 'IDScanner.FrontCaptured'
-  | 'IDScanner.BackCaptured'
-  | 'IDScanner.ScanCompleted'
-  | 'IDScanner.Error';
+/**
+ * ROI Failed event payload
+ */
+export interface RoiFailedEvent {
+  reason: string;
+  normalizedLinesCount: number;
+}
+
+/**
+ * Full Frame Fallback event payload
+ */
+export interface FullFrameFallbackEvent {
+  reason: string;
+  roiLinesCount: number;
+  fullFrameLinesCount: number;
+}
