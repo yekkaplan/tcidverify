@@ -1,7 +1,8 @@
 package com.idverify.reactnative
 
+import android.view.View
+import android.view.ViewGroup
 import androidx.camera.view.PreviewView
-import androidx.lifecycle.LifecycleOwner
 import com.facebook.react.uimanager.SimpleViewManager
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.annotations.ReactProp
@@ -27,17 +28,28 @@ class IdVerifyCameraViewManager : SimpleViewManager<PreviewView>() {
             scaleType = PreviewView.ScaleType.FILL_CENTER
             
             // CRITICAL: Set explicit layout params for React Native
-            layoutParams = android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
         }
+
+        // Fix for 0x0 layout issue in some RN setups
+        previewView.post {
+            val width = previewView.width
+            val height = previewView.height
+            if (width == 0 || height == 0) {
+                 previewView.requestLayout()
+                 previewView.invalidate()
+            }
+        }
+
         return previewView
     }
 
     @ReactProp(name = "isBackSide")
     fun setIsBackSide(view: PreviewView, isBackSide: Boolean) {
-        // This will be handled when binding camera
+        // This will be handled when binding camera in Module
     }
 
     @ReactProp(name = "active")
@@ -73,7 +85,16 @@ class IdVerifyCameraViewManager : SimpleViewManager<PreviewView>() {
             return
         }
 
-        android.util.Log.d(TAG, "Passing PreviewView to IdVerifyModule...")
-        module.setPreviewView(view, activity)
+        // Layout hack: ensure view is measured and then set
+        view.post {
+            // Trigger layout if dimensions are missing
+            if (view.width == 0 || view.height == 0) {
+                 view.requestLayout()
+                 view.invalidate()
+            }
+
+            android.util.Log.d(TAG, "Passing PreviewView to IdVerifyModule... Size: ${view.width}x${view.height}")
+            module.setPreviewView(view, activity)
+        }
     }
 }
