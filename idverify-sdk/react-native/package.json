@@ -1,0 +1,50 @@
+{
+  "name": "@idverify/react-native-sdk",
+  "version": "1.0.0",
+  "description": "React Native bridge for IDVerify SDK - Turkish ID card verification",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "react-native",
+    "id-verification",
+    "turkish-id",
+    "mrz",
+    "ocr"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-native": ">=0.76.0"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.25.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.6",
+    "@types/react-native": "^0.76.0",
+    "typescript": "^5.0.4"
+  },
+  "files": [
+    "lib/",
+    "android/",
+    "src/",
+    "react-native.config.js",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/idverify-sdk"
+  },
+  "react-native": {
+    "android": {
+      "sourceDir": "./android",
+      "packageImportPath": "import com.idverify.reactnative.IdVerifyPackage;"
+    }
+  }
+}
