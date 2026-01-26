@@ -31,9 +31,13 @@ export interface QualityMetrics {
 /**
  * Extracted data from ID card
  * Maps to native AutoCaptureAnalyzer.CaptureResult.extractedData
+ *
+ * Note: Keys are determined by the native SDK's OCR/MRZ parser.
  */
 export interface ExtractedData {
-  // Front side fields
+  [key: string]: string | undefined;
+
+  // Front side fields (Turkish ID)
   tckn?: string;
   surname?: string;
   name?: string;
@@ -45,7 +49,7 @@ export interface ExtractedData {
   documentNumber?: string;
   surnameFromMRZ?: string;
   nameFromMRZ?: string;
-  birthDate?: string; // From MRZ
+  birthDate?: string; // From MRZ standard
   expiryDate?: string;
   sex?: string;
   mrzScore?: string;
@@ -66,8 +70,10 @@ export interface CaptureResult {
  * SDK configuration
  */
 export interface IdVerifyConfig {
-  // Future configuration options
-  // For now, empty but extensible
+  /**
+   * Optional license key if required by Native SDK
+   */
+  licenseKey?: string;
 }
 
 /**
@@ -87,7 +93,7 @@ export interface ErrorEvent {
 }
 
 /**
- * ROI Failed event payload
+ * ROI Failed event payload (Reserved for future use)
  */
 export interface RoiFailedEvent {
   reason: string;
@@ -95,7 +101,7 @@ export interface RoiFailedEvent {
 }
 
 /**
- * Full Frame Fallback event payload
+ * Full Frame Fallback event payload (Reserved for future use)
  */
 export interface FullFrameFallbackEvent {
   reason: string;

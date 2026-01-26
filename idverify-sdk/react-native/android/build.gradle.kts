@@ -33,7 +33,8 @@ android {
 
 dependencies {
     // React Native
-    implementation("com.facebook.react:react-android")
+    // Use dynamic version to match consuming app's version
+    implementation("com.facebook.react:react-android:+")
     
     // IDVerify Core SDK
     implementation(project(":idverify-sdk:android"))
