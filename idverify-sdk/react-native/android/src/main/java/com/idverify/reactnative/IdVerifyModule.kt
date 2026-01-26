@@ -47,78 +47,31 @@ class IdVerifyModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
     // ==================== Auto Capture API ====================
 
     @ReactMethod
-    fun startAutoCapture(isBackSide: Boolean, promise: Promise) {
-        if (!isInitialized) {
-            promise.reject("NOT_INITIALIZED", "SDK not initialized. Call init() first.")
-            return
-        }
-
-        val activity = getCurrentActivity()
-        if (activity == null) {
-            promise.reject("NO_ACTIVITY", "No current activity available")
-            return
-        }
-
-        try {
-            cameraHelper?.startAutoCapture(activity, isBackSide)
-            promise.resolve(null)
-        } catch (e: Exception) {
-            Log.e(TAG, "startAutoCapture failed", e)
-            promise.reject("START_ERROR", "Failed to start auto capture: ${e.message}", e)
-        }
+    fun startCamera(promise: Promise) {
+        Log.d(TAG, "startCamera called from JS")
+        CameraController.getInstance().start(promise)
     }
 
     @ReactMethod
-    fun stopAutoCapture(promise: Promise) {
-        try {
-            cameraHelper?.stopAutoCapture()
-            promise.resolve(null)
-        } catch (e: Exception) {
-            Log.e(TAG, "stopAutoCapture failed", e)
-            promise.reject("STOP_ERROR", "Failed to stop auto capture: ${e.message}", e)
-        }
+    fun stopCamera(promise: Promise) {
+        Log.d(TAG, "stopCamera called from JS")
+        CameraController.getInstance().stop(promise)
     }
 
     /**
      * Set PreviewView for camera preview
-     * Called by IdVerifyCameraViewManager when view is created
+     * DEPRECATED: handled by View internal logic
      */
     fun setPreviewView(view: PreviewView, activity: Activity) {
-        Log.d(TAG, "setPreviewView called")
-        if (cameraHelper == null) {
-             // In case ViewManager sets view before init or after cleanup
-             Log.w(TAG, "CameraHelper not initialized yet, initializing...")
-             cameraHelper = CameraHelper(this)
-             isInitialized = true
-        }
-        cameraHelper?.setPreviewView(view, activity)
+        // No-op
     }
 
     // ==================== Event Listeners (CameraHelper) ====================
-
-    override fun onStateChange(state: AutoCaptureAnalyzer.CaptureState, message: String) {
-        reactApplicationContext.runOnUiQueueThread {
-             emitStateChange(state, message)
-        }
-    }
-
-    override fun onQualityUpdate(metrics: AutoCaptureAnalyzer.QualityMetrics) {
-        reactApplicationContext.runOnUiQueueThread {
-             emitQualityUpdate(metrics)
-        }
-    }
-
-    override fun onCaptured(result: AutoCaptureAnalyzer.CaptureResult, isBackSide: Boolean) {
-        reactApplicationContext.runOnUiQueueThread {
-             emitCaptured(result, isBackSide)
-        }
-    }
-    
-    override fun onError(code: String, message: String) {
-        reactApplicationContext.runOnUiQueueThread {
-             emitError(code, message)
-        }
-    }
+    // Events now emitted directly by IdVerifyCameraView
+    override fun onStateChange(state: AutoCaptureAnalyzer.CaptureState, message: String) {}
+    override fun onQualityUpdate(metrics: AutoCaptureAnalyzer.QualityMetrics) {}
+    override fun onCaptured(result: AutoCaptureAnalyzer.CaptureResult, isBackSide: Boolean) {}
+    override fun onError(code: String, message: String) {}
 
     // ==================== Event Emission ====================
 

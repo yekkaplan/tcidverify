@@ -39,8 +39,36 @@ class CameraHelper(
 
     fun setPreviewView(view: PreviewView, activity: Activity) {
         this.previewView = view
-        Log.d(TAG, "PreviewView set, attempting to bind camera...")
-        bindCameraIfReady(activity)
+        Log.d(TAG, "setPreviewView called. Checking attachment state...")
+        
+        // DEBUG PROBES
+        Log.e(TAG, "PREVIEW_DEBUG: size=${view.width}x${view.height}")
+        Log.e(TAG, "PREVIEW_DEBUG: attached=${view.isAttachedToWindow}")
+        Log.e(TAG, "PREVIEW_DEBUG: windowToken=${view.windowToken}")
+        Log.e(TAG, "PREVIEW_DEBUG: display=${view.display}")
+
+        // GOLDEN FIX: Only bind when attached to window
+        if (view.isAttachedToWindow) {
+             Log.d(TAG, "View already attached, binding immediately.")
+             bindCameraIfReady(activity)
+        }
+
+        view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                Log.e(TAG, "✅ VIEW ATTACHED TO WINDOW -> BINDING CAMERA")
+                Log.e(TAG, "PREVIEW_DEBUG (Attached): windowToken=${v.windowToken}, display=${v.display}")
+                bindCameraIfReady(activity)
+            }
+
+            override fun onViewDetachedFromWindow(v: View) {
+                Log.e(TAG, "⚠️ VIEW DETACHED FROM WINDOW -> UNBINDING")
+                try {
+                    cameraProvider?.unbindAll()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error unbinding on detach", e)
+                }
+            }
+        })
     }
 
     fun startAutoCapture(activity: Activity, isBackSide: Boolean) {
@@ -61,8 +89,11 @@ class CameraHelper(
                     onCaptured = { result -> eventListener.onCaptured(result, isBackSide) }
                 )
 
-                Log.d(TAG, "Camera analyzer prepared for ${if (isBackSide) "back" else "front"} side")
-                bindCameraIfReady(activity)
+                Log.d(TAG, "Camera analyzer prepared. Triggering re-bind if view is ready.")
+                // Bind if view is already set and attached
+                if (previewView != null && previewView!!.isAttachedToWindow) {
+                    bindCameraIfReady(activity)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Camera initialization failed", e)
                 eventListener.onError("CAMERA_INIT_ERROR", "Camera initialization failed: ${e.message}")
@@ -75,8 +106,8 @@ class CameraHelper(
             cameraProvider?.unbindAll()
             activeAnalyzer?.release()
             activeAnalyzer = null
-            // We do NOT clear previewView here as it might be reused or handled by ViewManager
-            Log.d(TAG, "Camera stopped")
+            // We do NOT clear previewView here, but the listener handles detach
+            Log.d(TAG, "Camera stopped (unbindAll called)")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping camera", e)
         }
@@ -91,27 +122,22 @@ class CameraHelper(
             Log.d(TAG, "Not ready to bind: view=${view != null}, analyzer=${analyzer != null}, provider=${provider != null}")
             return
         }
+        
+        if (!view.isAttachedToWindow) {
+             Log.w(TAG, "Attempted to bind but View is NOT attached to window. Skipping.")
+             return
+        }
 
-        // Ensure view is ready
-        if (view.display == null || view.width == 0 || view.height == 0) {
-            Log.d(TAG, "PreviewView not ready yet (w=${view.width}, h=${view.height}), waiting for layout")
+        // Ensure view dimensions (secondary check)
+        if (view.width == 0 || view.height == 0) {
+            Log.d(TAG, "PreviewView attached but 0x0. Waiting for layout pass...")
+            // The ViewManager's Choreographer hack will eventually fix the size and trigger layout
+            // We can listen to layout changes just to be sure to trigger bind again
             view.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
-                override fun onLayoutChange(
-                    v: View?,
-                    left: Int,
-                    top: Int,
-                    right: Int,
-                    bottom: Int,
-                    oldLeft: Int,
-                    oldTop: Int,
-                    oldRight: Int,
-                    oldBottom: Int
-                ) {
-                    val w = right - left
-                    val h = bottom - top
-                    if (w > 0 && h > 0) {
+                override fun onLayoutChange(v: View?, l: Int, t: Int, r: Int, b: Int, ol: Int, ot: Int, or: Int, ob: Int) {
+                    if ((r - l) > 0 && (b - t) > 0) {
                         view.removeOnLayoutChangeListener(this)
-                        Log.d(TAG, "PreviewView layout ready (w=$w, h=$h), binding now")
+                        Log.d(TAG, "PreviewView dimensions valid (${r-l}x${b-t}), re-attempting bind")
                         bindCameraIfReady(activity)
                     }
                 }
@@ -128,21 +154,22 @@ class CameraHelper(
 
         try {
             val rotation = view.display?.rotation ?: android.view.Surface.ROTATION_0
+            Log.d(TAG, "Binding Camera: View size=${view.width}x${view.height}, Rotation=$rotation")
 
             val preview = Preview.Builder()
                 .setTargetRotation(rotation)
                 .build()
-                .also {
-                    it.setSurfaceProvider(view.surfaceProvider)
-                }
+
+            // KEY STEP: Set surface provider strictly here
+            preview.setSurfaceProvider(view.surfaceProvider)
 
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .setTargetRotation(rotation)
                 .setTargetResolution(Size(1280, 720))
                 .build()
-                .also {
-                    it.setAnalyzer(cameraExecutor, analyzer)
+                .apply {
+                    setAnalyzer(cameraExecutor, analyzer)
                 }
 
             provider.unbindAll()
@@ -152,7 +179,7 @@ class CameraHelper(
                 preview,
                 imageAnalysis
             )
-            Log.i(TAG, "✅ Camera successfully bound to lifecycle!")
+            Log.i(TAG, "✅ CAMERA SUCCESSFULLY BOUND TO LIFECYCLE")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Camera bind failed", e)
             eventListener.onError("CAMERA_BIND_ERROR", "Failed to bind camera: ${e.message}")

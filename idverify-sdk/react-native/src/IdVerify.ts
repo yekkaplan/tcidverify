@@ -51,22 +51,37 @@ class IdVerify {
   }
 
   /**
-   * Start auto capture for front or back side of ID card
+   * Start camera session (V2 Architecture)
    * 
-   * @param isBackSide - true for back side (MRZ), false for front side (TCKN)
-   * @returns Promise that resolves when capture starts
+   * @returns Promise that resolves when camera starts
    */
-  static async startAutoCapture(isBackSide: boolean = false): Promise<void> {
-    return IdVerifyModule.startAutoCapture(isBackSide);
+  static async startCamera(): Promise<void> {
+    return IdVerifyModule.startCamera();
   }
 
   /**
-   * Stop auto capture
+   * Stop camera session (V2 Architecture)
    * 
-   * @returns Promise that resolves when capture stops
+   * @returns Promise that resolves when camera stops
+   */
+  static async stopCamera(): Promise<void> {
+    return IdVerifyModule.stopCamera();
+  }
+
+  /**
+   * @deprecated Use startCamera() instead. Side selection is now handled via IdVerifyCameraView props.
+   */
+  static async startAutoCapture(_isBackSide: boolean = false): Promise<void> {
+    console.warn('startAutoCapture is deprecated. Use startCamera() and IdVerifyCameraView props.');
+    return IdVerifyModule.startCamera();
+  }
+
+  /**
+   * @deprecated Use stopCamera() instead.
    */
   static async stopAutoCapture(): Promise<void> {
-    return IdVerifyModule.stopAutoCapture();
+    console.warn('stopAutoCapture is deprecated. Use stopCamera().');
+    return IdVerifyModule.stopCamera();
   }
 
   /**
