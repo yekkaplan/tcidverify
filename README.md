@@ -1,75 +1,82 @@
 # ID Verify SDK
 
-Turkish ID Card Scanner SDK - Multi-Layer Architecture
+**Turkish ID Card Scanner SDK** — Open-source, multi-layer architecture for scanning and validating Turkish ID cards in real time.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![GitHub](https://img.shields.io/badge/GitHub-yekkaplan%2Ftcidverify-blue)](https://github.com/yekkaplan/tcidverify)
 
 ## 📖 Overview
 
-A comprehensive SDK for scanning and validating Turkish ID cards with three-layer architecture:
+This SDK provides:
 
-1. **Android Native SDK** (Kotlin) - Core scanning engine with ML Kit
-2. **React Native Bridge** - Native module connecting to JavaScript
-3. **React Native Library** - TypeScript/JavaScript API
+1. **Android Native SDK** (Kotlin + C++/OpenCV) — Core scanning engine with ML Kit and native image processing
+2. **React Native Bridge** — Native module for JavaScript
+3. **React Native Library** — TypeScript/JavaScript API
+
+All processing is **offline** and **on-device**; no images or personal data are sent to any server.
 
 ## 🏗️ Project Structure
 
 ```
-idverify-sdk/
-├── android/                    # Native Android SDK (Kotlin)
-│   ├── src/main/java/com/idverify/sdk/
-│   │   ├── api/               # Public SDK API
-│   │   ├── core/              # Verification engine
-│   │   ├── decision/          # Decision engine & scoring
-│   │   ├── detection/         # Quality gate
-│   │   ├── pipeline/          # Front/back analysis pipelines
-│   │   ├── mrz/               # MRZ extraction & validation
-│   │   ├── validation/        # TCKN & aspect ratio validators
-│   │   ├── scoring/           # Scoring system
-│   │   └── utils/             # Utilities
-│   └── build.gradle.kts
+idverify/
+├── idverify-sdk/
+│   ├── android/                    # Native Android SDK (Kotlin + C++)
+│   │   ├── src/main/java/com/idverify/sdk/
+│   │   │   ├── api/               # Public SDK API
+│   │   │   ├── core/              # Verification engine
+│   │   │   ├── autocapture/       # Auto-capture & MRZ analysis
+│   │   │   ├── mrz/               # MRZ extraction & validation
+│   │   │   └── ...
+│   │   ├── src/main/cpp/          # OpenCV image processing
+│   │   └── build.gradle.kts
+│   │
+│   └── react-native/              # React Native Library
+│       ├── android/               # RN Native Bridge
+│       ├── src/                   # TypeScript/JavaScript
+│       ├── package.json
+│       └── README.md              # RN usage guide
 │
-└── react-native/              # React Native Library
-    ├── android/               # RN Native Bridge
-    │   └── src/main/java/com/idverify/bridge/
-    │       ├── IDScannerModule.kt
-    │       ├── IDScannerViewManager.kt
-    │       └── DataMapper.kt
-    ├── src/                   # TypeScript/JavaScript
-    │   ├── components/
-    │   ├── hooks/
-    │   └── types.ts
-    ├── package.json
-    └── USAGE.md              # Detailed usage guide
+├── LICENSE
+├── CONTRIBUTING.md
+└── README.md
 ```
 
 ## ✨ Features
 
-- ✅ Real-time ID card detection using ML Kit
-- ✅ MRZ parsing (ICAO Doc 9303 compliant)
-- ✅ Physical authenticity validation
+- ✅ Real-time ID card detection (CameraX + ML Kit)
+- ✅ MRZ parsing (ICAO Doc 9303, TD1 format)
+- ✅ Native C++ preprocessing (OpenCV) for better OCR
+- ✅ ROI + Full-frame fallback for reliable reads
+- ✅ Checksum-based auto-correction of OCR errors
 - ✅ Dual-side scanning (front & back)
-- ✅ Image quality checks (blur, glare detection)
-- ✅ TypeScript support
-- ✅ Event-driven architecture
+- ✅ TypeScript support for React Native
+- ✅ 100% offline; no data stored permanently
+
+## 📱 Screenshots (Android Test App)
+
+| Başlangıç ekranı | Kamera ekranı (ön yüz okuma) |
+|------------------|------------------------------|
+| <img src="docs/screenshots/android-test-app-start.png" width="280" alt="ID Scanner Test - Başlangıç" /> | <img src="docs/screenshots/android-test-app-camera.png" width="280" alt="ID Scanner Test - Kamera" /> |
+| T.C. Kimlik Kartı Okuyucu — İşleme Başla | Kimlik ön yüzü çerçeveye hizalayın; netlik ve stabilite geri bildirimi |
 
 ## 🚀 Quick Start
 
-### For React Native Apps
+### React Native
 
 ```bash
-# Install the package
+# From repository
+git clone https://github.com/yekkaplan/tcidverify.git
+cd tcidverify
 npm install file:./idverify-sdk/react-native
 
-# Or from npm (when published)
-npm install @yourorg/react-native-id-scanner
+# Or from npm when published
+# npm install @idverify/react-native-sdk
 ```
 
-See [React Native Usage Guide](./react-native/USAGE.md) for detailed instructions.
+See [React Native README](idverify-sdk/react-native/README.md) for usage.
 
-### For Android Apps
+### Android (Gradle)
 
-```gradle
+```kotlin
 // settings.gradle.kts
 include(":idverify-sdk:android")
 
@@ -81,35 +88,34 @@ dependencies {
 
 ## 📚 Documentation
 
-- [SDK Architecture](./README.md) - This file
-- [React Native Usage](./react-native/USAGE.md) - RN integration guide
-- [TC ID Specification](../TC_ID_SPEC.md) - Turkish ID card format
+| Document | Description |
+|----------|-------------|
+| [SDK Architecture](idverify-sdk/ARCHITECTURE.md) | Pipeline, modules, and design (Turkish) |
+| [SDK README](idverify-sdk/README.md) | Technical overview and integration |
+| [React Native](idverify-sdk/react-native/README.md) | RN installation and API |
+| [TC ID Spec](idverify-sdk/TC_ID_SPEC.md) | Turkish ID (TD1) format and validation (Turkish) |
 
 ## 🔧 Development
 
-### Build Android SDK
-
 ```bash
+# Build Android SDK
 ./gradlew :idverify-sdk:android:build
-```
 
-### Build React Native Bridge
+# Build & install Android test app (emulator or device)
+./gradlew :idverify-sdk:android-test-app:installDebug
 
-```bash
+# Build React Native bridge
 ./gradlew :idverify-sdk:react-native:android:build
+
+# React Native package
+cd idverify-sdk/react-native && npm install && npm run prepare
 ```
 
-### Build React Native Package
-
-```bash
-cd idverify-sdk/react-native
-npm install
-npm run prepare
-```
+**Android test app:** Android Studio’da run konfigürasyonu olarak `idverify-sdk.android-test-app` seçip çalıştırabilirsiniz. Detaylı adımlar için [android-test-app README](idverify-sdk/android-test-app/README.md).
 
 ## 📋 Requirements
 
-- **Android**: API Level 21+ (Android 5.0+)
+- **Android**: minSdk 21+ (Android 5.0+)
 - **React Native**: 0.71+
 - **Kotlin**: 1.9+
 - **Java**: 11+
@@ -123,16 +129,12 @@ npm run prepare
 
 ## 📄 License
 
-MIT License - see [LICENSE](./LICENSE) file
+This project is open source under the [MIT License](LICENSE).
 
 ## 👥 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md) before submitting issues or pull requests.
 
-## 🐛 Issues
+## 🐛 Issues & Discussions
 
-Found a bug? Please open an issue on GitHub.
-
-## 📧 Contact
-
-For questions and support, please contact [yekpassage@gmail.com](mailto:your@email.com)
+[Open an issue](https://github.com/yekkaplan/tcidverify/issues) or start a discussion on [GitHub](https://github.com/yekkaplan/tcidverify).

@@ -1,6 +1,6 @@
 # ID Verify SDK
 
-**Advanced Turkish ID Card Scanner SDK** - Built with Kotlin, Native C++ (OpenCV), and ML Kit.
+**Advanced Turkish ID Card Scanner SDK** — Open-source. Built with Kotlin, Native C++ (OpenCV), and ML Kit.
 
 ## Key Features 🚀
 
@@ -48,17 +48,16 @@ implementation(project(":idverify-sdk:android"))
 ### React Native
 
 ```bash
-npm install file:../idverify-sdk/react-native
+# From repo root
+npm install file:./path/to/idverify/idverify-sdk/react-native
 ```
 
-See [React Native README](react-native/README.md) for usage details.
+See [React Native README](react-native/README.md) for usage details. When published to npm: `npm install @idverify/react-native-sdk`.
 
 ---
 
 ## Technical Specs
 
-For detailed technical specifications of the Turkish ID Card (TD1 format) and the validation algorithms used, please refer to:
-👉 **[TC_ID_SPEC.md](TC_ID_SPEC.md)**
-
-For architecture details:
-👉 **[ARCHITECTURE.md](ARCHITECTURE.md)**
+- **Turkish ID (TD1) spec & validation:** [TC_ID_SPEC.md](TC_ID_SPEC.md) (Turkish)
+- **Architecture & pipeline:** [ARCHITECTURE.md](ARCHITECTURE.md) (Turkish)
+- **Contributing:** [CONTRIBUTING.md](../CONTRIBUTING.md) in the repository root

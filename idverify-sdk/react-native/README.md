@@ -1,10 +1,16 @@
 # @idverify/react-native-sdk
 
-React Native bridge for IDVerify SDK - Turkish ID card verification.
+React Native bridge for **ID Verify SDK** — Turkish ID card verification. Open-source (MIT).
 
 ## Installation
 
 ```bash
+# From repository: https://github.com/yekkaplan/tcidverify
+git clone https://github.com/yekkaplan/tcidverify.git
+cd tcidverify
+npm install file:./idverify-sdk/react-native
+
+# Or from npm when published
 npm install @idverify/react-native-sdk
 ```
 
@@ -39,3 +45,7 @@ IdVerify.onCaptured((result) => {
 ## API
 
 See the TypeScript definitions in `src/types.ts` for complete API documentation.
+
+## Contributing
+
+This package is part of the [ID Verify SDK](https://github.com/yekkaplan/tcidverify) monorepo. See the root [CONTRIBUTING.md](../../CONTRIBUTING.md) for how to contribute.

@@ -1,11 +1,13 @@
-# T.C. Kimlik Kartı Doğrulama SDK - Mimari Dokümantasyonu
+# T.C. Kimlik Kartı Doğrulama SDK — Mimari Dokümantasyonu
+
+*This document describes the architecture of the Turkish ID Card verification SDK. The main body is in Turkish.*
 
 ## 1. Genel Bakış
 
 Bu SDK, **ML Kit** ve **Native C++ (OpenCV)** hibrit yapısını kullanarak "Bu görüntü gerçek bir T.C. Kimlik Kartı mı?" sorusuna yanıt veren yüksek performanslı bir sistemdir.
 
 ### Temel Prensipler
-- ❌ LLM KULLANILMAZ (Deterministik yapı)
+- ✅ Deterministik yapı
 - ✅ Tamamen offline çalışır
 - ✅ Hybrid Architecture (Kotlin + C++)
 - ✅ Robust Fallback (ROI başarısızsa Full Frame devreye girer)

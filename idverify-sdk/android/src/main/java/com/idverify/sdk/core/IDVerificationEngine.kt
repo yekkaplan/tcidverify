@@ -32,7 +32,7 @@ import java.util.concurrent.Executors
  * - Camera → Quality Gate → Aspect Ratio → Pipeline → Scoring → Decision
  * - Multi-frame analysis (3-5 frames)
  * - Separate pipelines for front/back
- * - No LLM - pure ML Kit + deterministic rules
+ * - Pure ML Kit + deterministic rules
  * 
  * Key Principles:
  * - Minimize false positives (reject non-ID images early)

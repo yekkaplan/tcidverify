@@ -1,5 +1,7 @@
 # TCKK SDK: Teknik Şartname ve Veri Yapısı Analizi (Sürüm 2.0 - AutoCapture)
 
+*Technical specification for the Turkish ID Card (TD1) format used by this SDK. Main content is in Turkish.*
+
 Bu doküman, Yeni Nesil Türkiye Cumhuriyeti Kimlik Kartlarının (TD1) optik karakter tanıma (OCR) ve doğrulama süreçleri için kullanılan teknik standartları tanımlar. SDK'nın **Auto-Correction** yetenekleri de bu spesifikasyona dayanır.
 
 ---

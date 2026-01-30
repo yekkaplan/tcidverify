@@ -2,7 +2,7 @@
  * TypeScript type definitions for IDVerify React Native SDK
  * 
  * This file defines all domain models and types used by the SDK.
- * Follows AGENTS.md architecture - deterministic, no LLM logic.
+ * Follows AGENTS.md architecture - deterministic logic.
  */
 
 /**

@@ -1,6 +1,6 @@
-# ID Verify SDK - Agent Documentation
+# ID Verify SDK — Agent & Contributor Documentation
 
-This document provides comprehensive information about the project architecture, structure, and development guidelines for AI assistants working on this codebase.
+This document provides architecture, structure, and development guidelines for AI assistants and contributors. **ID Verify SDK** is open-source (MIT). See [CONTRIBUTING.md](../CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) in the repository root.
 
 ## Project Overview
 
@@ -92,7 +92,7 @@ idverify/
 │       ├── package.json
 │       ├── tsconfig.json
 │       ├── README.md
-│       └── USAGE.md
+│       └── README.md
 │
 ├── gradle/
 ├── build.gradle.kts
@@ -225,7 +225,7 @@ npm run typescript
 1. Add TypeScript types in `types.ts`
 2. Implement in appropriate hook or component
 3. Export from `index.tsx`
-4. Update `USAGE.md` with examples
+4. Update React Native `README.md` and docs with examples
 5. Ensure bridge supports the functionality
 
 ### Updating MRZ Parsing
@@ -295,11 +295,8 @@ include(":idverify-sdk:react-native:android")
 
 ## Documentation
 
-- [Project README](../README.md) - Overview
-- [SDK README](../idverify-sdk/README.md) - Architecture details
-- [React Native Usage](../idverify-sdk/react-native/USAGE.md) - Integration guide
-- [TC ID Spec](../TC_ID_SPEC.md) - Turkish ID format
-
-## Contact
-
-For questions: yekpassage@gmail.com
+- [Project README](../README.md) — Overview
+- [SDK README](../idverify-sdk/README.md) — Technical overview
+- [React Native](../idverify-sdk/react-native/README.md) — Integration guide
+- [TC ID Spec](../idverify-sdk/TC_ID_SPEC.md) — Turkish ID (TD1) format
+- [CONTRIBUTING](../CONTRIBUTING.md) — How to contribute
